@@ -1,5 +1,11 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.7
+- Phân biệt gói của từng key: nhãn "Gói miễn phí / Gói trả phí / Gói chưa rõ" cạnh mỗi key. Nhận biết theo tên hạn mức Google báo (đuôi FreeTier = miễn phí) và thử một model Pro khi kiểm tra key (Google không có API cho biết gói thanh toán trực tiếp). Giới hạn lượt học được tách riêng theo gói.
+- Đếm hạn mức đúng giờ của Google: ngày hạn mức tính theo nửa đêm giờ Thái Bình Dương (khoảng 14 đến 15 giờ chiều giờ Việt Nam) chứ không theo nửa đêm giờ máy, nên phần trăm không còn lệch. Khi Google báo hết hạn mức theo ngày, số lượt hôm nay được đồng bộ bằng giới hạn (100%) và hiện giờ hạn mức làm mới.
+- Tìm key nhanh: ô tìm theo đoạn key, tên tài khoản, gói hoặc trạng thái (cả trong Cài đặt và màn tài khoản); dán nhiều key một lần; liên kết lấy key mới ở Google AI Studio.
+- "Kiểm tra tình trạng tất cả model": quét mọi model hiện có của key, hiện sống, hết hạn mức, không có hạn mức, bận hay không tồn tại kèm phần trăm đã dùng hôm nay (model ảnh/giọng nói được liệt kê nhưng không thử tự động vì tốn lượt).
+
 ## 1.0.6
 - Nút "Quét và tự chọn model sống" trong combo chat chữ: thử từng model chat bằng key của bạn (mỗi model tốn 1 lượt nhỏ), hiện model nào sống, hết hạn mức hôm nay, không có hạn mức miễn phí, bận hay không tồn tại, rồi tự đặt combo từ các model sống, nhanh nhất lên đầu (tối đa 5).
 - Bộ lọc model theo vai (chat chữ, tạo ảnh) chuyển vào lõi và loại thêm các model phiên âm, nhạc, nghiên cứu, Live.

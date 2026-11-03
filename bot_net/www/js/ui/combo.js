@@ -1,6 +1,7 @@
 // Bộ sửa combo model: mỗi vai có nhiều model theo thứ tự ưu tiên, kiểm tra model còn sống.
 import { h, toast, openSheet } from './dom.js';
 import { openModelPicker } from './models.js';
+import { openScanSheet } from './scan.js';
 
 const ROLES = [['text', 'Chat chữ'], ['image', 'Tạo ảnh'], ['vision', 'Hiểu ảnh']];
 
@@ -55,18 +56,8 @@ export function comboEditor(mgr, { combo, keys, onChange }) {
     } }));
   };
   function showScan(results, best) {
-    openSheet({
-      title: 'Kết quả quét model', side: 'right',
-      build(body, close) {
-        body.append(h('p', { class: 'muted', text: 'Sắp theo tốc độ. Chỉ model "Sống" mới được đề xuất làm combo chat chữ.' }));
-        const order = [...results].sort((a, b) => (a.state === 'ok' ? 0 : 1) - (b.state === 'ok' ? 0 : 1) || a.ms - b.ms);
-        for (const r of order) body.append(h('div', { class: 'keyrow scan-row', 'data-model': r.model }, h('code', { text: r.model }), badge(r),
-          r.state !== 'ok' && r.detail ? h('span', { class: 'hint err', text: `HTTP ${r.status || '?'}` }) : null));
-        body.append(h('button', { class: 'btn', id: 'scanApply', text: best.length ? `Dùng ${best.length} model sống làm combo chat chữ` : 'Không có model sống nào', disabled: !best.length, onclick: () => {
-          combo.text = best; onChange(); toast(`Đã đặt combo: ${best.join(', ')}`); close(); render();
-        } }));
-      },
-    });
+    openScanSheet({ results, best, applyLabel: `Dùng ${best.length} model sống làm combo chat chữ`,
+      onApply: (b) => { combo.text = b; onChange(); toast(`Đã đặt combo: ${b.join(', ')}`); render(); } });
   }
   render();
   return root;

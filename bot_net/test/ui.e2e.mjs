@@ -116,16 +116,32 @@ await p.locator('.keyrow[data-model="gemini-pro"] button', { hasText: 'Xóa' }).
 await T('#keyInput').fill('AIzaSyBADKEY0000000'); await T('#keyAdd').click();
 await T('#keyCheckAll').click();
 await p.waitForSelector('.keyblock[data-key="2"] .badge.bad');
-assert.match(await p.locator('.keyblock[data-key="0"] .badge').innerText(), /Sống/);
+assert.match(await p.locator('.keyblock[data-key="0"] .badge:not(.plan)').innerText(), /Sống/);
 assert.match(await p.locator('.keyblock[data-key="2"] .hint.err').innerText(), /HTTP 400.*API key not valid/, 'hiện lý do lỗi thật của Google');
-assert.match(await p.locator('.keyblock[data-key="2"] .badge').innerText(), /Sai/);
+assert.match(await p.locator('.keyblock[data-key="2"] .badge:not(.plan)').innerText(), /Sai/);
 
 await p.locator('.keyblock[data-key="2"] button', { hasText: 'Xóa' }).click();
 // key hết hạn mức theo ngày: app tự học giới hạn 100 lượt/ngày từ lời Google báo
 await T('#keyInput').fill('AIzaSyQUOTA0000000'); await T('#keyAdd').click();
 await T('#keyCheckAll').click();
 await p.waitForSelector('.keyblock[data-key="2"] .badge.warn');
-assert.match(await p.locator('.keyblock[data-key="2"] .badge').innerText(), /Hết hạn mức/);
+assert.match(await p.locator('.keyblock[data-key="2"] .badge:not(.plan)').innerText(), /Hết hạn mức/);
+// gói: key bị 429 mang tên hạn mức FreeTier => Gói miễn phí; key chưa rõ thì ghi chưa rõ
+assert.match(await p.locator('.keyblock[data-key="2"] .badge.plan').innerText(), /Gói miễn phí/);
+assert.match(await p.locator('.keyblock[data-key="0"] .badge.plan').innerText(), /Gói miễn phí/); // đã thử model Pro khác: 429 mang tên FreeTier
+// Google báo hết hạn mức theo ngày (100 lượt) => số lượt hôm nay đồng bộ 100/100 = 100%
+assert.match(await p.locator('.keyblock[data-key="2"] .pct').innerText(), /100%/);
+// tìm nhanh key
+await T('#keySearch').fill('QUOTA');
+assert.equal(await p.locator('#comboBox').count(), 1);
+assert.equal(await p.locator('.sec .keyblock').count(), 1, 'chỉ còn key khớp');
+await T('#keySearch').fill('miễn phí');
+assert.equal(await p.locator('.sec .keyblock').count(), 3, 'cả 3 key đều nhận ra là gói miễn phí');
+await T('#keySearch').fill('trả phí');
+assert.equal(await p.locator('.sec .keyblock').count(), 0);
+assert.match(await p.locator('.sec .empty').innerText(), /Không có key nào khớp/);
+await T('#keySearch').fill('');
+assert.equal(await p.locator('.sec .keyblock').count(), 3);
 const accTexts = (await p.locator('.keyblock .badge').allInnerTexts()).map((x) => x.replace(/\d+ms/, 'Nms'));
 
 // 5) Chat thử (không gửi lên web)
@@ -206,6 +222,17 @@ assert.match(await p.locator('.scan-row[data-model="gemini-pro"] .badge').innerT
 await T('#scanApply').click();
 await p.waitForTimeout(300);
 assert.deepEqual([...(await p.evaluate(() => window.__mgr.accounts[0].combo.text))].sort(), ['gemini-fast', 'gemini-quick']);
+// 12) Dán nhiều key một lần + kiểm tra tình trạng tất cả model
+await T('#keyBulk').fill('AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1, AIzaSyBBBBBBBBBBBBBBBBBBBBBBBBBBBBB2\nrác ngắn');
+await T('#keyBulkAdd').click();
+assert.equal(await p.evaluate(() => window.__mgr.accounts[0].keys.length), 5);
+p.once('dialog', (d) => d.accept());
+await T('#scanAllModels').click();
+await p.waitForSelector('#scanSummary');
+assert.equal(await p.locator('.scan-row').count(), 5);
+assert.match(await p.locator('.scan-row[data-model="gemini-2.0-flash-image"] .badge').innerText(), /Không thử tự động/);
+assert.match(await p.locator('#scanSummary').innerText(), /Sống: 2/);
+assert.equal(await T('#getKey').getAttribute('href'), 'https://aistudio.google.com/apikey');
 
 assert.deepEqual(errs, [], 'không có lỗi JS: ' + errs.join('|'));
 console.log('ui e2e: PASS');

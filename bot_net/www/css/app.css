@@ -127,3 +127,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .hint.err { color: var(--bad); word-break: break-word; }
 .limrow { display: grid; grid-template-columns: 1fr 76px 76px; gap: 8px; align-items: center; font-size: 13px; }
 .limrow input { padding: 8px; font-size: 13px; }
+
+/* ===== Gói key ===== */
+.badge.plan { background: #3a4465; } .badge.plan.free { background: rgba(255,176,32,.2); color: var(--warn); } .badge.plan.paid { background: rgba(62,207,90,.22); color: var(--ok); }
+.keyblock .keyrow { flex-wrap: wrap; }

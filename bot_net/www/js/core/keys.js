@@ -1,5 +1,7 @@
 // Nhóm API key: key chính trước, lỗi thì chuyển key dự phòng, hồi lại sau thời gian nghỉ.
 
+import { normalize } from './text.js';
+
 const pad = (n) => String(n).padStart(2, '0');
 const dayOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
@@ -62,4 +64,21 @@ export class KeyPool {
 
   exportUsage() { return JSON.parse(JSON.stringify(this.usageData)); }
   importUsage(data) { this.usageData = data || {}; }
+}
+
+/** Tách nhiều API key từ một đoạn dán (xuống dòng, dấu phẩy, khoảng trắng), bỏ trùng và bỏ rác. */
+export function parseKeys(text) {
+  const out = [];
+  for (const t of String(text ?? '').split(/[\s,;]+/)) if (t.length >= 20 && /^[A-Za-z0-9._\-]+$/.test(t) && !out.includes(t)) out.push(t);
+  return out;
+}
+
+const PLAN_LABEL = { free: 'miễn phí', paid: 'trả phí' };
+const STATE_LABEL = { ok: 'sống', quota: 'hết hạn mức', noquota: 'không có hạn mức', invalid: 'sai key khóa', denied: 'từ chối', server: 'bận', model: 'model chết', error: 'lỗi mạng' };
+
+/** Tìm nhanh trong danh sách key theo một đoạn key, tên tài khoản, gói hoặc trạng thái. */
+export function filterKeys(rows, q) {
+  const n = normalize(q);
+  if (!n) return rows;
+  return rows.filter((r) => normalize([r.key, r.account, PLAN_LABEL[r.plan], STATE_LABEL[r.state]].filter(Boolean).join(' ')).includes(n));
 }

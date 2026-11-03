@@ -27,7 +27,7 @@ export function defaultAccount() {
 
 /** Lưu bằng bộ nhớ trừu tượng {get(key), set(key, value)} (Capacitor Preferences hoặc localStorage). */
 export class Store {
-  constructor(adapter) { this.adapter = adapter; this.settings = defaultSettings(); this.accounts = []; this.usage = {}; this.memory = {}; this.limitsLearned = {}; }
+  constructor(adapter) { this.adapter = adapter; this.settings = defaultSettings(); this.accounts = []; this.usage = {}; this.memory = {}; this.limitsLearned = {}; this.plans = {}; }
 
   async load() {
     const raw = await this.adapter.get('botnet');
@@ -38,6 +38,7 @@ export class Store {
       this.usage = d.usage || {};
       this.memory = d.memory || {};
       this.limitsLearned = d.limitsLearned || {};
+      this.plans = d.plans || {};
     }
     return this;
   }

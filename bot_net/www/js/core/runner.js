@@ -43,11 +43,11 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
 }
 
 export class AccountBot {
-  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onRecord = null, quotaPct = () => null, log = () => {}, save = () => {} }) {
+  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onPlan = null, onRecord = null, quotaPct = () => null, log = () => {}, save = () => {} }) {
     this.account = account; this.getSettings = getSettings; this.http = http; this.bots = bots;
     this.now = now; this.nowMs = () => now().getTime(); this.sleep = sleep; this.rand = rand; this.stickers = stickers; this.memory = memory;
     this.log = (text, level = 'info') => log({ t: Date.now(), level, text, acc: account.id });
-    this.saveAcc = save; this.onLimit = onLimit; this.quotaPct = quotaPct;
+    this.saveAcc = save; this.onLimit = onLimit; this.onPlan = onPlan; this.quotaPct = quotaPct;
     this.client = new ChatClient({ http, jar: CookieJar.from(account.cookies) });
     this.pool = new KeyPool(account.keys || [], { onRecord });
     this.health = new ModelHealth({ now: this.nowMs });
@@ -234,7 +234,7 @@ export class AccountBot {
     const hint = task.kind === 'proactive' ? '\n(Bạn tự chen vào câu chuyện, không phải ai gọi bạn: bình luận ngắn như một người bạn, đừng giới thiệu bản thân.)' : '';
     const ask = (extra = '') => generateCombo({
       http: this.http, pool: this.pool, health: this.health, models, system, context, question: task.question + hint + extra,
-      asker: task.from, mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, hedgeMs: urgentTask ? (st.hedgeMs ?? 0) : 0,
+      asker: task.from, mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, onPlan: this.onPlan, hedgeMs: urgentTask ? (st.hedgeMs ?? 0) : 0,
     });
     let d = parseDirective((await ask()).text);
     if (st.avoidRepeat !== false && d.reply && isRepeat(d.reply, this.recent)) {
@@ -287,7 +287,7 @@ export class AccountBot {
     if (!models.length) { this.log('Chưa chọn model tạo ảnh trong combo', 'warn'); return; }
     this.log(`Đang tạo ảnh: ${prompt}`);
     try {
-      const out = await generateCombo({ http: this.http, pool: this.pool, health: this.health, models, system: '', context: [], question: prompt, mode: 'image', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit });
+      const out = await generateCombo({ http: this.http, pool: this.pool, health: this.health, models, system: '', context: [], question: prompt, mode: 'image', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, onPlan: this.onPlan });
       const url = await this.client.uploadImage(out.image.data, out.image.mime);
       quota.record(this.stats);
       await this.#waitToSend(8, this.nowMs(), st);

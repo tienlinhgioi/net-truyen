@@ -3,6 +3,8 @@ import { h, openSheet, switchEl, toast } from './dom.js';
 import { comboEditor } from './combo.js';
 import { openReport } from './report.js';
 import { keyRow } from './keyrow.js';
+import { filterKeys } from '../core/keys.js';
+import { openScanSheet } from './scan.js';
 import { pickImageAsDataUrl, download, pickTextFile } from '../platform.js';
 
 const DAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -36,13 +38,17 @@ export function openSettings(mgr, applyTheme) {
       const ta = (id, key, split = '\n') => { const t = h('textarea', { id, onchange: (e) => set({ [key]: e.target.value.split(split).map((s) => s.trim()).filter(Boolean) }) }); t.value = st[key].join(split === '\n' ? '\n' : ', '); return t; };
 
       const keyReport = h('div', { class: 'sec', id: 'allKeys' });
+      const keySearch = h('input', { type: 'text', id: 'allKeySearch', placeholder: 'Tìm nhanh key: đoạn key, tên tài khoản, gói, trạng thái...', oninput: () => renderKeyReport() });
       const renderKeyReport = () => {
         keyReport.replaceChildren();
         for (const a of mgr.accounts) {
           if (!a.keys.length) continue;
           const model = mgr.checkModelOf(a);
+          const rows = a.keys.map((k, i) => ({ key: k, i, account: a.displayName || a.name, plan: mgr.planOf(k), state: mgr.keyStatusFor(k, model)?.state }));
+          const shown = filterKeys(rows, keySearch.value);
+          if (!shown.length) continue;
           keyReport.append(h('div', { class: 'muted', text: `${a.displayName || a.name} · model ${model || '(chưa chọn)'}` }));
-          a.keys.forEach((k, i) => keyReport.append(keyRow(mgr, { key: k, index: i, model })));
+          for (const r of shown) keyReport.append(keyRow(mgr, { key: r.key, index: r.i, model }));
         }
       };
       renderKeyReport();
@@ -52,6 +58,16 @@ export function openSettings(mgr, applyTheme) {
         const res = await mgr.checkAccountKeys(mgr.accounts.map((a) => a.id));
         checkAll.disabled = false; checkAll.textContent = 'Kiểm tra đồng loạt tất cả API key'; renderKeyReport();
         toast(`${res.filter((r) => r.state === 'ok').length}/${res.length} key đang sống`);
+      } });
+
+      const scanAll = h('button', { class: 'btn ghost', id: 'scanAllSettings', text: 'Kiểm tra tình trạng tất cả model', onclick: async () => {
+        const keys = mgr.accounts.flatMap((a) => a.keys);
+        if (!keys.length) return toast('Chưa có key nào');
+        if (!confirm('Sẽ thử từng model chat một lần bằng key đầu tiên (mỗi model tốn 1 lượt nhỏ). Tiếp tục?')) return;
+        scanAll.disabled = true;
+        try { const r = await mgr.scanModels(keys, (d, t) => { scanAll.textContent = `Đang kiểm tra ${d}/${t}...`; }, { all: true }); openScanSheet({ results: r.results, title: 'Tình trạng tất cả model' }); }
+        catch (err) { toast(err.message); }
+        scanAll.disabled = false; scanAll.textContent = 'Kiểm tra tình trạng tất cả model'; renderKeyReport();
       } });
 
       // Giới hạn lượt theo model: tự học từ lỗi hạn mức của Google, bạn sửa tay được.
@@ -81,7 +97,7 @@ export function openSettings(mgr, applyTheme) {
         h('div', { class: 'sec' }, h('h3', { text: 'Combo model chung' }),
           h('span', { class: 'hint', text: 'Dùng khi tài khoản không có combo riêng. Gói miễn phí giới hạn lượt rất thấp theo từng model (có model chỉ 20 lượt mỗi ngày) và model Pro thường không có hạn mức: hãy thêm NHIỀU model vào combo để cộng dồn hạn mức, và dùng key từ các dự án Google khác nhau.' }),
           comboEditor(mgr, { combo: st.combo, keys: () => mgr.accounts.flatMap((a) => a.keys), onChange: () => set({ combo: st.combo }) })),
-        h('div', { class: 'sec' }, h('h3', { text: 'API key và mức dùng' }), checkAll, keyReport),
+        h('div', { class: 'sec' }, h('h3', { text: 'API key và mức dùng' }), checkAll, scanAll, keySearch, keyReport),
         h('div', { class: 'sec' }, h('h3', { text: 'Giới hạn lượt theo model' }), limBox),
         h('div', { class: 'sec' }, h('h3', { text: 'Delay và tốc độ' }),
           num('Khoảng cách tối thiểu giữa 2 tin (delay chat)', 'chatDelayMs', 'giây', 'setChatDelay', 1000), num('Delay đổi API key', 'keyDelayMs', 'giây', 'setKeyDelay', 1000),

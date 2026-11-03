@@ -1,7 +1,9 @@
 // Danh sách tài khoản (bên phải) và màn sửa từng tài khoản.
 import { h, openSheet, avatarEl, switchEl, toast } from './dom.js';
 import { comboEditor } from './combo.js';
+import { openScanSheet } from './scan.js';
 import { keyRow } from './keyrow.js';
+import { parseKeys, filterKeys } from '../core/keys.js';
 
 export function openAccounts(mgr) {
   openSheet({
@@ -59,10 +61,13 @@ export function openEditor(mgr, id) {
       // ---- API key ----
       const keysBox = h('div', { class: 'sec' });
       const keyInput = h('input', { type: 'password', placeholder: 'Dán Gemini API key', id: 'keyInput', autocomplete: 'off' });
+      const search = h('input', { type: 'text', id: 'keySearch', placeholder: 'Tìm nhanh key: gõ một đoạn key, gói, trạng thái...', oninput: () => renderKeys() });
       const renderKeys = () => {
         keysBox.replaceChildren();
         const model = mgr.checkModelOf(a);
-        a.keys.forEach((k, i) => keysBox.append(keyRow(mgr, { key: k, index: i, model, onRemove: () => { save({ keys: a.keys.filter((_, j) => j !== i) }); renderKeys(); } })));
+        const rows = a.keys.map((k, i) => ({ key: k, i, account: a.displayName || a.name, plan: mgr.planOf(k), state: mgr.keyStatusFor(k, model)?.state }));
+        for (const r of filterKeys(rows, search.value)) keysBox.append(keyRow(mgr, { key: r.key, index: r.i, model, onRemove: () => { save({ keys: a.keys.filter((_, j) => j !== r.i) }); renderKeys(); } }));
+        if (a.keys.length && !keysBox.children.length) keysBox.append(h('div', { class: 'empty', text: 'Không có key nào khớp.' }));
       };
       renderKeys();
       const addKey = h('button', { class: 'btn', id: 'keyAdd', text: 'Lưu key', onclick: () => {
@@ -72,6 +77,13 @@ export function openEditor(mgr, id) {
         save({ keys: [...a.keys, v] }); keyInput.value = ''; renderKeys();
         toast(a.keys.length === 1 ? 'Đã lưu key chính' : 'Đã thêm key dự phòng');
       } });
+      const bulk = h('textarea', { id: 'keyBulk', placeholder: 'Dán nhiều key một lần (mỗi key một dòng hoặc cách nhau dấu phẩy)', style: 'min-height:70px' });
+      const bulkBtn = h('button', { class: 'btn ghost', id: 'keyBulkAdd', text: 'Thêm tất cả key đã dán', onclick: () => {
+        const add = parseKeys(bulk.value).filter((k) => !a.keys.includes(k));
+        if (!add.length) return toast('Không có key mới hợp lệ trong đoạn dán');
+        save({ keys: [...a.keys, ...add] }); bulk.value = ''; renderKeys(); toast(`Đã thêm ${add.length} key`);
+      } });
+      const getKey = h('a', { class: 'link', id: 'getKey', href: 'https://aistudio.google.com/apikey', target: '_blank', rel: 'noopener', text: 'Lấy key mới ở Google AI Studio ↗' });
       const checkAll = h('button', { class: 'btn ghost', id: 'keyCheckAll', text: 'Kiểm tra tất cả key', onclick: async () => {
         if (!a.keys.length) return toast('Chưa có key nào');
         checkAll.disabled = true; checkAll.textContent = 'Đang kiểm tra...';
@@ -81,6 +93,14 @@ export function openEditor(mgr, id) {
       } });
 
       const offKeys = mgr.on((t) => { if (t === 'keys' && keysBox.isConnected) renderKeys(); });
+      const scanAll = h('button', { class: 'btn ghost', id: 'scanAllModels', text: 'Kiểm tra tình trạng tất cả model', onclick: async () => {
+        if (!a.keys.length) return toast('Chưa có key nào');
+        if (!confirm('Sẽ thử từng model chat một lần (mỗi model tốn 1 lượt nhỏ). Tiếp tục?')) return;
+        scanAll.disabled = true;
+        try { const r = await mgr.scanModels(a.keys, (d, t) => { scanAll.textContent = `Đang kiểm tra ${d}/${t}...`; }, { all: true }); openScanSheet({ results: r.results, title: 'Tình trạng tất cả model' }); }
+        catch (err) { toast(err.message); }
+        scanAll.disabled = false; scanAll.textContent = 'Kiểm tra tình trạng tất cả model'; renderKeys();
+      } });
       const combo = comboEditor(mgr, { combo: a.combo, keys: () => a.keys, onChange: () => save({ combo: a.combo, model: a.combo.text[0] || '' }) });
 
       const field = (label, el) => h('label', { class: 'f' }, label, el);
@@ -120,7 +140,7 @@ export function openEditor(mgr, id) {
         h('div', { class: 'row' }, avatarEl(a, 'av sm'), h('div', { class: 'meta' }, h('b', { text: a.displayName || a.name }), h('div', { class: 'muted', text: `${a.email} · đã gửi ${st.sent || 0}, lỗi ${st.errors || 0}` })),
           h('span', { style: 'margin-left:auto' }, switchEl(mgr.isRunning(id), (on) => mgr.setEnabled(id, on)))),
         refresh,
-        h('div', { class: 'sec' }, h('h3', { text: 'Gemini API' }), keyInput, addKey, keysBox, checkAll),
+        h('div', { class: 'sec' }, h('h3', { text: 'Gemini API' }), keyInput, addKey, getKey, bulk, bulkBtn, search, keysBox, checkAll, scanAll),
         h('div', { class: 'sec' }, h('h3', { text: 'Combo model' }), combo),
         h('div', { class: 'sec' }, h('h3', { text: 'Nhận diện' }),
           field('Lệnh gọi (đặt ở đầu hoặc trong tin nhắn)', cmd), field('Tên gọi', nm), field('Tên gọi khác, ghi chú tìm kiếm thông minh (cách nhau dấu phẩy)', al)),

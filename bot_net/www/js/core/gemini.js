@@ -87,7 +87,7 @@ export function parseResponse(json) {
  */
 export function parseGoogleError(data) {
   const e = data?.error;
-  const out = { reason: '', message: '', perDay: false, limit: 0, retryMs: 0, quotaId: '', limits: [], noQuota: false };
+  const out = { reason: '', message: '', perDay: false, limit: 0, retryMs: 0, quotaId: '', limits: [], noQuota: false, plan: '' };
   if (!e || typeof e !== 'object') return out;
   out.message = String(e.message || '');
   const vs = [];
@@ -102,6 +102,8 @@ export function parseGoogleError(data) {
   if (main) { out.quotaId = main.id; out.perDay = /PerDay/i.test(main.id); out.limit = main.val; }
   else if (vs.length) { out.quotaId = vs[0].id; out.perDay = vs.some((v) => /PerDay/i.test(v.id)); }
   out.noQuota = vs.length > 0 && vs.every((v) => !v.val);
+  // Tên hạn mức có đuôi FreeTier = dự án đang ở gói miễn phí; không có = gói trả phí.
+  if (vs.length) out.plan = vs.some((v) => /FreeTier/i.test(v.id)) ? 'free' : 'paid';
   return out;
 }
 
@@ -119,7 +121,7 @@ export function classifyError(status, data) {
 }
 
 /** Sinh câu trả lời; tự đổi sang key dự phòng khi key hiện tại hết hạn mức hoặc sai. */
-export async function generate({ http, pool, model, system, context, question, asker, mode = 'text', onLimit, maxChars = 0, keyDelayMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function generate({ http, pool, model, system, context, question, asker, mode = 'text', onLimit, onPlan, maxChars = 0, keyDelayMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   let serverRetries = 0, lastWhy = '';
   for (;;) {
     const key = pool.current(model);
@@ -139,7 +141,7 @@ export async function generate({ http, pool, model, system, context, question, a
     const kind = classifyError(res.status, res.data);
     const g = parseGoogleError(res.data);
     if (kind === 'quota' || kind === 'invalid' || kind === 'denied') {
-      if (kind === 'quota') for (const l of g.limits) onLimit?.(model, l);
+      if (kind === 'quota') { for (const l of g.limits) onLimit?.(model, l, { key, plan: g.plan }); if (g.plan) onPlan?.(key, g.plan); }
       lastWhy = kind === 'invalid' ? 'API key sai hoặc bị khóa' : kind === 'denied' ? 'Google từ chối tạm thời (403)' : g.noQuota ? 'model này không có hạn mức miễn phí với key này (cần bật thanh toán hoặc đổi model)' : g.perDay ? `hết hạn mức theo ngày${g.limit ? ` (${g.limit} lượt)` : ''}` : 'hết hạn mức theo phút';
       // Theo phút: nghỉ đúng thời gian Google yêu cầu. Theo ngày: nghỉ lâu (kiểm tra lại sau 30 phút). 403 lạ: nghỉ 5 phút, không giết key.
       const cd = kind === 'quota' ? (g.retryMs || (g.perDay ? 30 * 60000 : undefined)) : kind === 'denied' ? 300000 : undefined;
@@ -214,18 +216,36 @@ export async function checkModel(http, key, model, now = () => Date.now()) {
   const state = classifyError(res.status, res.data);
   const g = parseGoogleError(res.data);
   const noq = state === 'quota' && g.noQuota;
-  return { alive: state === 'quota' && !noq, state: noq ? 'noquota' : state, ms, status: res.status, detail: g.message, limits: state === 'quota' ? g.limits : [] };
+  return { alive: state === 'quota' && !noq, state: noq ? 'noquota' : state, ms, status: res.status, detail: g.message, limits: state === 'quota' ? g.limits : [], plan: g.plan, retryMs: g.retryMs };
 }
 
 /** Kiểm tra một API key: có [model] thì gửi yêu cầu thử (biết cả hạn mức), không thì dùng danh sách model. */
 export async function checkKey(http, key, model, now = () => Date.now()) {
   if (model) {
     const r = await checkModel(http, key, model, now);
-    return { state: r.state, ms: r.ms, status: r.status, detail: r.detail, limits: r.limits };
+    return { state: r.state, ms: r.ms, status: r.status, detail: r.detail, limits: r.limits, plan: r.plan, retryMs: r.retryMs };
   }
   const t0 = now();
   const res = await http({ url: `${BASE}/models?pageSize=1`, method: 'GET', headers: { 'x-goog-api-key': key } });
   return { state: res.status === 200 ? 'ok' : classifyError(res.status, res.data), ms: now() - t0, status: res.status, detail: parseGoogleError(res.data).message };
+}
+
+/**
+ * Đoán gói của key bằng cách thử một model Pro (1 yêu cầu): chạy được = trả phí (suy ra), 429 mang tên hạn mức FreeTier = miễn phí.
+ * Google không có API nào trả về gói thanh toán trực tiếp.
+ */
+export async function detectPlan(http, key) {
+  const res = await http({ url: `${BASE}/models?pageSize=200`, method: 'GET', headers: { 'x-goog-api-key': key } });
+  if (res.status !== 200) return 'unknown';
+  const pros = (res.data.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => m.name.replace(/^models\//, '')).filter((id) => /pro/i.test(id) && !/tts|image|computer|customtools|robotics|live|audio/i.test(id)).slice(0, 4);
+  for (const model of pros) {
+    const r = await checkModel(http, key, model);
+    if (r.state === 'ok') return 'paid';
+    if ((r.state === 'quota' || r.state === 'noquota') && r.plan) return r.plan;
+    // 404 (model không còn cho key mới) hoặc bận: thử model Pro kế tiếp
+  }
+  return 'unknown';
 }
 
 /** Kiểm tra đồng loạt nhiều key, giữ thứ tự, tối đa [concurrency] yêu cầu song song. */

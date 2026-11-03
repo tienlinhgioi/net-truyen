@@ -2,8 +2,8 @@
 import { Store, defaultAccount } from './core/store.js';
 import { AccountBot, BotSet, buildSystem } from './core/runner.js';
 import { ChatClient } from './core/chatclient.js';
-import { generateCombo, listModels, checkKey, checkModel } from './core/gemini.js';
-import { LimitBook, percentOf } from './core/limits.js';
+import { generateCombo, listModels, checkKey, checkModel, detectPlan } from './core/gemini.js';
+import { LimitBook, percentOf, quotaDay } from './core/limits.js';
 import { ModelHealth } from './core/combo.js';
 import { parseDirective } from './core/directive.js';
 import { UserMemory } from './core/convo.js';
@@ -14,7 +14,7 @@ export class Manager {
   constructor({ adapter, http, service = null, sleep, loadStickers = null }) {
     this.store = new Store(adapter);
     this.http = http; this.service = service; this.sleep = sleep; this.loadStickers = loadStickers;
-    this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.limits = new LimitBook(); this.svcKey = null; this.paused = [];
+    this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.limits = new LimitBook(); this.plans = {}; this.svcKey = null; this.paused = [];
     this.bots = new Map();
     this.botSet = new BotSet();
     this.logs = [];
@@ -27,6 +27,7 @@ export class Manager {
     await this.store.load();
     this.usage = this.store.usage || {};
     this.memory = this.store.memory || {};
+    this.plans = this.store.plans || {};
     this.limits = LimitBook.from(this.store.limitsLearned, this.store.settings.modelLimits);
     try { this.stickers = (await this.loadStickers?.()) || []; } catch { this.stickers = []; }
     for (const a of this.store.accounts) this.botSet.add(a);
@@ -61,14 +62,12 @@ export class Manager {
     clearTimeout(this.saveTimer); this.saveTimer = null;
     this.store.usage = this.usage;
     for (const [id, b] of this.bots) this.memory[id] = b.memory.toJSON();
-    await this.store.adapter.set('botnet', JSON.stringify({ settings: this.store.settings, accounts: this.store.accounts, usage: this.usage, memory: this.memory, limitsLearned: this.limits.toJSON() }));
+    await this.store.adapter.set('botnet', JSON.stringify({ settings: this.store.settings, accounts: this.store.accounts, usage: this.usage, memory: this.memory, limitsLearned: this.limits.toJSON(), plans: this.plans }));
   }
 
   /** Cộng dồn lượt dùng theo ngày/key/model (dùng chung cho mọi tài khoản và chat thử). */
   recordUsage(key, model, tokens = 0) {
-    const d = new Date();
-    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const u = (((this.usage[day] ??= {})[key] ??= {})[model] ??= { requests: 0, tokens: 0 });
+    const u = (((this.usage[quotaDay()] ??= {})[key] ??= {})[model] ??= { requests: 0, tokens: 0 });
     u.requests++; u.tokens += tokens;
     this.save();
   }
@@ -80,7 +79,8 @@ export class Manager {
       sleep: this.sleep, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
       onRecord: (key, model, tokens) => this.recordUsage(key, model, tokens),
       quotaPct: (model) => this.modelPercent(account, model),
-      onLimit: (model, l) => { this.limits.learn(model, l); this.save(); this.emit('keys'); }, save: () => { this.save(); this.emit('account', account); },
+      onLimit: (model, l, ctx) => { this.#learnLimit(model, l, ctx?.key, ctx?.plan); this.emit('keys'); },
+      onPlan: (key, plan) => this.setPlan(key, plan), save: () => { this.save(); this.emit('account', account); },
     });
     this.bots.set(account.id, bot);
     bot.start();
@@ -170,9 +170,16 @@ export class Manager {
   async loadModels(key) { return listModels(this.http, key); }
 
   usageFor(key, model) {
-    const day = new Date();
-    const k = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-    return this.usage[k]?.[key]?.[model] ?? { requests: 0, tokens: 0 };
+    return this.usage[quotaDay()]?.[key]?.[model] ?? { requests: 0, tokens: 0 };
+  }
+
+  planOf(key) { return this.plans[key]?.plan || ''; }
+  setPlan(key, plan) { if (plan && plan !== 'unknown' && this.plans[key]?.plan !== plan) { this.plans[key] = { plan, at: Date.now() }; this.save(); } }
+
+  /** Google báo hết hạn mức theo ngày thì số lượt đã dùng chắc chắn bằng giới hạn: đồng bộ để phần trăm đúng. */
+  syncUsage(key, model, limit) {
+    const u = (((this.usage[quotaDay()] ??= {})[key] ??= {})[model] ??= { requests: 0, tokens: 0 });
+    if (u.requests < limit) u.requests = limit;
   }
 
   exportConfig(secrets) { return this.store.exportAll({ secrets }); }
@@ -220,6 +227,13 @@ export class Manager {
   /** Model dùng để kiểm tra key của một tài khoản: model chat chữ đầu tiên (không có thì kiểm tra bằng danh sách model). */
   checkModelOf(account) { return comboFor(account, this.settings, 'text')[0] || ''; }
 
+  #learnLimit(model, l, key, plan) {
+    if (key && plan) this.setPlan(key, plan);
+    this.limits.learn(model, l, plan || this.planOf(key));
+    if (l.perDay && key) this.syncUsage(key, model, l.limit);
+    this.save();
+  }
+
   /** Phần trăm hạn mức hôm nay của một model với key tốt nhất của tài khoản (null nếu chưa biết giới hạn). */
   modelPercent(account, model) {
     const ps = account.keys.map((k) => this.quotaInfo(k, model).percent).filter((p) => p !== null);
@@ -229,8 +243,8 @@ export class Manager {
   /** Số lượt đã dùng hôm nay, giới hạn (tự học hoặc người dùng đặt) và phần trăm cho một key + model. */
   quotaInfo(key, model) {
     const u = this.usageFor(key, model);
-    const lim = this.limits.get(model);
-    return { ...u, rpd: lim.rpd, rpm: lim.rpm, learned: !!lim.learned, percent: percentOf(u.requests, lim.rpd) };
+    const lim = this.limits.get(model, this.planOf(key));
+    return { ...u, plan: this.planOf(key), rpd: lim.rpd, rpm: lim.rpm, learned: !!lim.learned, percent: percentOf(u.requests, lim.rpd) };
   }
 
   /**
@@ -252,11 +266,15 @@ export class Manager {
         const j = jobs[i++];
         let r;
         try { r = await checkKey(this.http, j.key, j.model); } catch (e) { r = { state: 'error', ms: 0, detail: e.message }; }
-        for (const l of r.limits || []) this.limits.learn(j.model, l);
-        this.keyStatus[`${j.key}|${j.model}`] = { ...r, model: j.model, at: Date.now() };
+        if (r.plan) this.setPlan(j.key, r.plan);
+        for (const l of r.limits || []) this.#learnLimit(j.model, l, j.key, r.plan);
+        this.keyStatus[`${j.key}|${j.model}`] = { ...r, model: j.model, at: Date.now(), resetAt: r.retryMs ? Date.now() + r.retryMs : undefined };
       }
     };
     await Promise.all(Array.from({ length: Math.min(2, jobs.length) }, worker));
+    // Key chưa rõ gói: thử một model Pro để đoán (miễn phí hay trả phí).
+    const unknown = [...new Set(jobs.map((j) => j.key))].filter((k) => !this.planOf(k));
+    for (const k of unknown) { try { this.setPlan(k, await detectPlan(this.http, k)); } catch { /* bỏ qua */ } }
     this.save();
     this.emit('keys');
     return jobs.map((j) => ({ ...j, ...this.keyStatusFor(j.key, j.model) }));
@@ -279,20 +297,26 @@ export class Manager {
    * Quét model dùng được: thử từng model chat chữ bằng key đầu tiên (mỗi model tốn 1 lượt nhỏ), 2 yêu cầu song song.
    * Trả về kết quả từng model và danh sách đề xuất (sống, nhanh nhất lên đầu).
    */
-  async scanModels(keys, onProgress = () => {}) {
+  async scanModels(keys, onProgress = () => {}, { all = false } = {}) {
     const key = keys[0];
     if (!key) throw new Error('Chưa có API key');
-    const models = filterForRole(await listModels(this.http, key), 'text').filter((m) => !/gemma/i.test(m.id));
+    const listed = await listModels(this.http, key);
+    const chat = new Set(filterForRole(listed, 'text').filter((m) => !/gemma/i.test(m.id)).map((m) => m.id));
+    const models = all ? listed : listed.filter((m) => chat.has(m.id));
     const results = [];
     let i = 0;
     const worker = async () => {
       while (i < models.length) {
         const m = models[i++];
         let r;
-        try { r = await checkModel(this.http, key, m.id); } catch (e) { r = { alive: false, state: 'error', ms: 0, detail: e.message, limits: [] }; }
-        for (const l of r.limits || []) this.limits.learn(m.id, l);
+        if (!chat.has(m.id)) r = { alive: false, state: 'skip', ms: 0, limits: [] }; // ảnh/giọng nói/nhúng: không thử tự động vì tốn lượt tạo ảnh/âm thanh
+        else {
+          try { r = await checkModel(this.http, key, m.id); } catch (e) { r = { alive: false, state: 'error', ms: 0, detail: e.message, limits: [] }; }
+          if (r.plan) this.setPlan(key, r.plan);
+          for (const l of r.limits || []) this.#learnLimit(m.id, l, key, r.plan);
+        }
         this.modelStatus[m.id] = { ...r, at: Date.now() };
-        results.push({ model: m.id, ...r });
+        results.push({ model: m.id, ...r, percent: this.quotaInfo(key, m.id).percent });
         onProgress(results.length, models.length);
       }
     };
