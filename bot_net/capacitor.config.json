@@ -1,0 +1,11 @@
+{
+  "appId": "com.botnet.app",
+  "appName": "Bot Net",
+  "webDir": "www",
+  "backgroundColor": "#0b1020",
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "CapacitorCookies": { "enabled": false }
+  },
+  "android": { "allowMixedContent": false }
+}
