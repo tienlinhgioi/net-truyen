@@ -15,7 +15,7 @@ test('parseGoogleError: đọc reason, hạn mức theo ngày/phút, giới hạ
   const min = parseGoogleError(quota('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 10, '35s'));
   assert.deepEqual([min.perDay, min.limit, min.retryMs], [false, 10, 35000]);
   assert.equal(parseGoogleError({ error: { details: [{ reason: 'API_KEY_INVALID' }] } }).reason, 'API_KEY_INVALID');
-  assert.deepEqual(parseGoogleError('rác'), { reason: '', message: '', perDay: false, limit: 0, retryMs: 0, quotaId: '' });
+  assert.deepEqual(parseGoogleError('rác'), { reason: '', message: '', perDay: false, limit: 0, retryMs: 0, quotaId: '', limits: [], noQuota: false });
 });
 
 test('classifyError: phân loại theo dữ liệu thật của Google', () => {

@@ -5,7 +5,7 @@ export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().to
 export function defaultSettings() {
   return {
     bg: '#0b1020', accent: '#2d6bff', wallpaper: null, wallpaperDim: 0.55,
-    chatDelayMs: 2000, keyDelayMs: 1000, reconnectDelayMs: 10000, pollMs: 1500,
+    chatDelayMs: 2000, keyDelayMs: 1000, hedgeMs: 0, reconnectDelayMs: 10000, pollMs: 1500,
     typingPerCharMs: 40, typingMinMs: 800, typingMaxMs: 4000,
     proactiveChance: 0.15, proactiveMaxPerHour: 6, convoWindowMs: 180000, starterEnabled: false, starterIdleMs: 20 * 60 * 1000,
     imagePerDay: 5, imageCooldownMs: 60000, moodEnabled: true, avoidRepeat: true,

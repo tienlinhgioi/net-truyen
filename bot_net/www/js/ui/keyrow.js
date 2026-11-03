@@ -4,7 +4,7 @@ import { h } from './dom.js';
 export const maskKey = (k) => (k.length > 10 ? `${k.slice(0, 6)}…${k.slice(-4)}` : '••••');
 
 const STATE = {
-  ok: ['ok', (s) => `Sống ${s.ms}ms`], quota: ['warn', () => 'Hết hạn mức'], invalid: ['bad', () => 'Sai/khóa key'], denied: ['warn', () => 'Bị từ chối tạm'],
+  ok: ['ok', (s) => `Sống ${s.ms}ms`], quota: ['warn', () => 'Hết hạn mức'], noquota: ['bad', () => 'Model không có hạn mức miễn phí'], invalid: ['bad', () => 'Sai/khóa key'], denied: ['warn', () => 'Bị từ chối tạm'],
   region: ['bad', () => 'Vùng không hỗ trợ'], model: ['warn', () => 'Key ok, model chết'], server: ['warn', () => 'Google lỗi'], error: ['bad', () => 'Lỗi mạng'], other: ['bad', () => 'Lỗi khác'],
 };
 

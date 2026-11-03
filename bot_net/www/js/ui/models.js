@@ -8,6 +8,8 @@ const fmt = (n) => (n == null ? '?' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n 
  * @param selected các model đã có sẵn trong danh sách (hiện dấu tích khi multi)
  */
 const NOT_CHAT = /image|imagen|tts|embedding|embed|aqa|veo|live|audio|robotics|computer-use|learnlm|native-audio/i;
+/** Cảnh báo theo tên model (dựa trên thực tế gói miễn phí). */
+const noteFor = (id) => (/pro/i.test(id) ? 'Pro thường không có hạn mức miễn phí (hay báo 429).' : /gemma/i.test(id) ? 'Rất chậm và hay in cả phần suy nghĩ, không khuyên dùng để chat.' : '');
 const IS_IMAGE = /image|imagen/i;
 
 /** Lọc danh sách theo vai: chat chữ bỏ model ảnh/giọng nói..., tạo ảnh chỉ giữ model ảnh. */
@@ -56,7 +58,8 @@ export function openModelPicker(mgr, { keys, current, multi = false, selected = 
             return h('div', { class: `model ${(multi ? chosen.has(m.id) : m.id === current) ? 'sel' : ''}`, 'data-id': m.id, onclick: () => pick(m.id) },
               h('b', { text: m.displayName || m.id }), h('span', { class: 'muted', text: m.id }),
               h('span', { class: 'muted', text: `Vào ${fmt(m.inputTokenLimit)} token · ra ${fmt(m.outputTokenLimit)} token` }),
-              h('span', { class: 'muted', text: `Hôm nay: ${u.requests} lượt, ${fmt(u.tokens)} token` }));
+              h('span', { class: 'muted', text: `Hôm nay: ${u.requests} lượt, ${fmt(u.tokens)} token` }),
+              noteFor(m.id) ? h('span', { class: 'hint err', text: noteFor(m.id) }) : null);
           }));
         } catch (e) { list.replaceChildren(h('div', { class: 'empty', text: `Không tải được (${e.kind || e.message}). Kiểm tra API key hoặc gõ tên model ở trên.` })); }
       }

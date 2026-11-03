@@ -264,3 +264,30 @@ test('mở chủ đề khi phòng chat im lặng lâu (nếu bật), có giới 
   await t.bot.tick(); await t.bot.tick();
   assert.deepEqual(t.sent, ['mọi người ơi dạo này đọc bộ nào hay không']);
 });
+
+test('tiết kiệm hạn mức: tin tự chen vào bị bỏ khi model đã dùng từ 70%, người gọi bot vẫn được trả lời', async () => {
+  let called = 0;
+  const lists = [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u2', 'hôm nay mưa', 'B')], [m(1, 'u', 'x'), m(2, 'u2', 'hôm nay mưa', 'B'), m(3, 'u', '/ai chào', 'A')]];
+  const t = setup({ chatLists: lists, settings: { proactiveChance: 1, chatDelayMs: 0 }, rand: () => 0, gemini: () => { called++; return gem('Chào bạn nhé'); } });
+  t.bot.quotaPct = () => 80;
+  await t.bot.tick(); await t.bot.tick();
+  assert.equal(called, 0, 'tin chen ngang không tốn lượt khi gần hết hạn mức');
+  assert.ok(t.logs.some((l) => /Tiết kiệm hạn mức/.test(l.text)));
+  await t.bot.tick();
+  assert.equal(called, 1, 'người gọi bot vẫn được trả lời');
+});
+
+test('ưu tiên model còn hạn mức: model gần hết (>=95%) bị đẩy xuống cuối combo', async () => {
+  const used = [];
+  const t = setup({ chatLists: [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', '/ai chào', 'A')]], account: { combo: { text: ['hetquota', 'con'], image: [], vision: [] } }, gemini: (r) => { used.push(/models\/([^:]+):/.exec(r.url)[1]); return gem('ok nhé'); } });
+  t.bot.quotaPct = (model) => (model === 'hetquota' ? 100 : 5);
+  await t.bot.tick(); await t.bot.tick();
+  assert.deepEqual(used, ['con']);
+});
+
+test('hết key vì model không có hạn mức: nhật ký nêu đúng lý do', async () => {
+  const pro = { error: { code: 429, message: 'q', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }, { retryDelay: '78958s' }] } };
+  const t = setup({ chatLists: [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', '/ai chào', 'A')]], gemini: () => ({ status: 429, data: pro }) });
+  await t.bot.tick(); await t.bot.tick();
+  assert.ok(t.logs.some((l) => /không có hạn mức miễn phí/.test(l.text)), JSON.stringify(t.logs.map((l) => l.text)));
+});

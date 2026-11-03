@@ -3,17 +3,23 @@
 const blank = (reply = '') => ({ reply, sticker: false, draw: '', manga: '', remember: '' });
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
+const pick = (o) => ({ reply: str(o.reply), sticker: o.sticker === true, draw: str(o.draw), manga: str(o.manga), remember: str(o.remember) });
+
+/** Văn bản giống đoạn "suy nghĩ" của model (gạch đầu dòng, Persona, Constraint...) thì không được gửi vào chat. */
+function looksLikeReasoning(t) {
+  const lines = t.split('\n');
+  const bullets = lines.filter((l) => /^\s*[*\-•]\s/.test(l)).length;
+  return bullets >= 2 || (lines.length > 2 && /constraint|persona|return only|json format/i.test(t));
+}
+
 export function parseDirective(raw) {
   let t = String(raw ?? '').trim();
   t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  if (t.startsWith('{')) {
-    try {
-      const o = JSON.parse(t);
-      return { reply: str(o.reply), sticker: o.sticker === true, draw: str(o.draw), manga: str(o.manga), remember: str(o.remember) };
-    } catch {
-      const m = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(t);
-      if (m) { let r = m[1]; try { r = JSON.parse(`"${m[1]}"`); } catch { /* giữ nguyên */ } return blank(r.trim()); }
-    }
-  }
-  return blank(t);
+  const candidates = t.startsWith('{') ? [t] : [];
+  const m = /\{[^{}]*"reply"[\s\S]*?\}/.exec(t);
+  if (m) candidates.push(m[0]);
+  for (const c of candidates) { try { return pick(JSON.parse(c)); } catch { /* thử cách khác */ } }
+  const r = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(t);
+  if (r) { let v = r[1]; try { v = JSON.parse(`"${r[1]}"`); } catch { /* giữ nguyên */ } return blank(v.trim()); }
+  return looksLikeReasoning(t) ? blank('') : blank(t);
 }

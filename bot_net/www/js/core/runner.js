@@ -6,7 +6,7 @@ import { generateCombo } from './gemini.js';
 import { decideReplies } from './decide.js';
 import { isActive } from './schedule.js';
 import { normalize, limitChars } from './text.js';
-import { comboFor, ModelHealth } from './combo.js';
+import { comboFor, ModelHealth, orderByBudget } from './combo.js';
 import { parseDirective } from './directive.js';
 import { pickSticker, ImageQuota } from './media.js';
 import { moodFor, typingDelayMs, splitReply, isRepeat } from './persona.js';
@@ -43,11 +43,11 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
 }
 
 export class AccountBot {
-  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onRecord = null, log = () => {}, save = () => {} }) {
+  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onRecord = null, quotaPct = () => null, log = () => {}, save = () => {} }) {
     this.account = account; this.getSettings = getSettings; this.http = http; this.bots = bots;
     this.now = now; this.nowMs = () => now().getTime(); this.sleep = sleep; this.rand = rand; this.stickers = stickers; this.memory = memory;
     this.log = (text, level = 'info') => log({ t: Date.now(), level, text, acc: account.id });
-    this.saveAcc = save; this.onLimit = onLimit;
+    this.saveAcc = save; this.onLimit = onLimit; this.quotaPct = quotaPct;
     this.client = new ChatClient({ http, jar: CookieJar.from(account.cookies) });
     this.pool = new KeyPool(account.keys || [], { onRecord });
     this.health = new ModelHealth({ now: this.nowMs });
@@ -207,7 +207,7 @@ export class AccountBot {
   #onError(e, task) {
     this.stats.errors++; this.#bump('errors');
     const urgent = task.kind === 'mention' || task.kind === 'followup';
-    if (e.kind === 'nokey') { this.log('Hết API key khả dụng, sẽ thử lại sau', 'error'); return urgent ? 'retry' : 'drop'; }
+    if (e.kind === 'nokey') { this.log(`Hết API key khả dụng${e.why ? `: ${e.why}` : ''}${e.retryAt ? `, thử lại lúc ${new Date(e.retryAt).toLocaleTimeString('vi-VN')}` : ''}`, 'error'); return urgent ? 'retry' : 'drop'; }
     if (e.kind === 'blocked') { this.log('Gemini từ chối trả lời câu này, bỏ qua', 'warn'); return 'drop'; }
     if (e.kind === 'nomodel') { this.log(`Không model nào dùng được: ${e.detail || ''}`, 'error'); return 'drop'; }
     const why = { invalid: 'API key sai hoặc bị khóa', quota: 'hết hạn mức', model: 'model không tồn tại hoặc không hỗ trợ', server: 'máy chủ Google đang lỗi' }[e.kind] || e.kind || e.message;
@@ -217,8 +217,15 @@ export class AccountBot {
 
   async #handle(task, st) {
     const a = this.account;
-    const models = comboFor(a, st, 'text');
+    let models = comboFor(a, st, 'text');
     if (!models.length) { this.log('Chưa chọn mô hình Gemini', 'error'); return 'drop'; }
+    const urgentTask = task.kind === 'mention' || task.kind === 'followup';
+    // Hạn mức miễn phí rất thấp: tin chen ngang/mở chủ đề chỉ dùng model còn dưới 70%, dành phần còn lại cho người gọi bot.
+    if (!urgentTask) {
+      models = models.filter((m) => (this.quotaPct(m) ?? 0) < 70);
+      if (!models.length) { this.log('Tiết kiệm hạn mức: bỏ qua tin tự chen vào', 'warn'); return 'drop'; }
+    }
+    models = orderByBudget(models, this.quotaPct);
     const t0 = this.nowMs();
     const notes = this.memory.get(task.userId).notes;
     const system = buildSystem(a, st, { mood: st.moodEnabled === false ? '' : moodFor(this.now()), notes });
@@ -227,7 +234,7 @@ export class AccountBot {
     const hint = task.kind === 'proactive' ? '\n(Bạn tự chen vào câu chuyện, không phải ai gọi bạn: bình luận ngắn như một người bạn, đừng giới thiệu bản thân.)' : '';
     const ask = (extra = '') => generateCombo({
       http: this.http, pool: this.pool, health: this.health, models, system, context, question: task.question + hint + extra,
-      asker: task.from, mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit,
+      asker: task.from, mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, hedgeMs: urgentTask ? (st.hedgeMs ?? 0) : 0,
     });
     let d = parseDirective((await ask()).text);
     if (st.avoidRepeat !== false && d.reply && isRepeat(d.reply, this.recent)) {

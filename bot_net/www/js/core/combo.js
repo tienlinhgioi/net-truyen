@@ -15,9 +15,15 @@ export function comboFor(account, settings, role) {
 /** Ghi nhớ model nào đang chết để bỏ qua một lúc (mặc định 10 phút). */
 export class ModelHealth {
   constructor({ now = () => Date.now(), ttlMs = 600000 } = {}) { this.now = now; this.ttlMs = ttlMs; this.map = new Map(); }
-  mark(model, alive) { this.map.set(model, { alive, at: this.now() }); }
+  mark(model, alive, ttlMs) { this.map.set(model, { alive, at: this.now(), ttl: ttlMs }); }
   isDead(model) {
     const h = this.map.get(model);
-    return !!h && !h.alive && this.now() - h.at < this.ttlMs;
+    return !!h && !h.alive && this.now() - h.at < (h.ttl ?? this.ttlMs);
   }
+}
+
+/** Đưa model sắp hết hạn mức (>=95% trong ngày) xuống cuối, giữ nguyên thứ tự ưu tiên của các model còn lại. */
+export function orderByBudget(models, pct) {
+  const ok = models.filter((m) => (pct(m) ?? 0) < 95);
+  return [...ok, ...models.filter((m) => !ok.includes(m))];
 }

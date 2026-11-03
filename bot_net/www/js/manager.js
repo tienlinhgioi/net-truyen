@@ -79,6 +79,7 @@ export class Manager {
       account, getSettings: () => this.store.settings, http: this.http, bots: this.botSet,
       sleep: this.sleep, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
       onRecord: (key, model, tokens) => this.recordUsage(key, model, tokens),
+      quotaPct: (model) => this.modelPercent(account, model),
       onLimit: (model, l) => { this.limits.learn(model, l); this.save(); this.emit('keys'); }, save: () => { this.save(); this.emit('account', account); },
     });
     this.bots.set(account.id, bot);
@@ -219,6 +220,12 @@ export class Manager {
   /** Model dùng để kiểm tra key của một tài khoản: model chat chữ đầu tiên (không có thì kiểm tra bằng danh sách model). */
   checkModelOf(account) { return comboFor(account, this.settings, 'text')[0] || ''; }
 
+  /** Phần trăm hạn mức hôm nay của một model với key tốt nhất của tài khoản (null nếu chưa biết giới hạn). */
+  modelPercent(account, model) {
+    const ps = account.keys.map((k) => this.quotaInfo(k, model).percent).filter((p) => p !== null);
+    return ps.length ? Math.min(...ps) : null;
+  }
+
   /** Số lượt đã dùng hôm nay, giới hạn (tự học hoặc người dùng đặt) và phần trăm cho một key + model. */
   quotaInfo(key, model) {
     const u = this.usageFor(key, model);
@@ -245,7 +252,7 @@ export class Manager {
         const j = jobs[i++];
         let r;
         try { r = await checkKey(this.http, j.key, j.model); } catch (e) { r = { state: 'error', ms: 0, detail: e.message }; }
-        if (r.limit) this.limits.learn(j.model, r.limit);
+        for (const l of r.limits || []) this.limits.learn(j.model, l);
         this.keyStatus[`${j.key}|${j.model}`] = { ...r, model: j.model, at: Date.now() };
       }
     };

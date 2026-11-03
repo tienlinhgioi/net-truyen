@@ -1,5 +1,13 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.5
+- Tìm ra nguyên nhân lỗi 429 bằng cách thử với key thật: gói miễn phí chỉ cho rất ít lượt mỗi ngày theo từng model (ví dụ gemini-3.8-flash chỉ 20 lượt/ngày, nghỉ khoảng 22 giờ), và model Pro không có hạn mức miễn phí (luôn 429). App giờ nhận ra cả hai: học giới hạn thật từ Google, hiện đúng phần trăm và lý do ("model không có hạn mức miễn phí", "hết hạn mức theo ngày (20 lượt)"), nghỉ đúng thời gian Google báo.
+- Tiết kiệm hạn mức: tin tự chen vào/mở chủ đề không dùng model đã dùng từ 70% hạn mức; model gần hết (từ 95%) bị đẩy xuống cuối combo để model còn hạn mức trả lời trước; tắt chạy song song model dự phòng theo mặc định (vì nhân đôi số lượt), bật được trong Cài đặt.
+- Giảm độ trễ khi model bận/chậm: mỗi yêu cầu chờ tối đa 12 giây rồi sang model kế, model bận (503) chỉ thử lại một lần và bị bỏ qua 45 giây, lỗi mạng được coi là lỗi tạm.
+- Sửa lỗi nhóm model Flash-Lite bị coi là lỗi vì không nhận cấu hình tắt "suy nghĩ" (Google chỉ báo "invalid argument"): app tự bỏ dần từng tính năng và nhớ lại cho lần sau.
+- Không còn gửi vào chat đoạn "suy nghĩ" của model (ví dụ gemma): câu trả lời không phải JSON mà giống ghi chú suy luận sẽ bị bỏ.
+- Cảnh báo trong danh sách model: Pro thường không có hạn mức miễn phí, gemma rất chậm.
+
 ## 1.0.4
 - Hiện phần trăm mức dùng của từng API key theo ngày (kèm thanh màu): số lượt hôm nay / giới hạn. Giới hạn tự học từ thông báo hết hạn mức của Google (theo ngày và theo phút), hoặc bạn gõ tay trong Cài đặt, mục "Giới hạn lượt theo model".
 - Sửa lỗi Cài đặt và Tài khoản cho kết quả kiểm tra key khác nhau: cả hai dùng chung một cách kiểm tra (gửi yêu cầu nhỏ qua model chat chữ của tài khoản), hiển thị cùng nội dung, và hiện lý do lỗi thật của Google (mã HTTP và lời báo).
