@@ -16,12 +16,20 @@ class WebTab extends StatefulWidget {
     required this.initialUrl,
     required this.sync,
     this.needsAuth = false,
+    this.active = true,
+    this.onBackAtRoot,
   });
   final String initialUrl;
   final AuthSync sync;
 
   /// Tab chỉ có nội dung khi đã đăng nhập (Tài khoản, Theo dõi).
   final bool needsAuth;
+
+  /// Chỉ tab đang hiển thị mới xử lý nút Back.
+  final bool active;
+
+  /// Gọi khi bấm Back mà trang web không còn lịch sử để lùi.
+  final VoidCallback? onBackAtRoot;
 
   @override
   State<WebTab> createState() => WebTabState();
@@ -45,33 +53,38 @@ class WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
       ..addJavaScriptChannel('NetVip', onMessageReceived: _onMessage)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(kBg)
-      ..setNavigationDelegate(NavigationDelegate(
-        onNavigationRequest: (r) {
-          switch (decideNavigation(Uri.parse(r.url))) {
-            case NavDecision.inApp:
-              return NavigationDecision.navigate;
-            case NavDecision.external:
-              launchUrl(Uri.parse(r.url), mode: LaunchMode.externalApplication);
-              return NavigationDecision.prevent;
-            case NavDecision.block:
-              return NavigationDecision.prevent;
-          }
-        },
-        onProgress: (p) => setState(() => _progress = p),
-        onPageStarted: (u) {
-          _current = Uri.tryParse(u) ?? _current;
-          setState(() => _error = null);
-        },
-        onPageFinished: (u) {
-          _current = Uri.tryParse(u) ?? _current;
-          _inject();
-        },
-        onWebResourceError: (e) {
-          if (e.isForMainFrame ?? false) {
-            setState(() => _error = 'Không tải được trang. Kiểm tra mạng.');
-          }
-        },
-      ));
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (r) {
+            switch (decideNavigation(Uri.parse(r.url))) {
+              case NavDecision.inApp:
+                return NavigationDecision.navigate;
+              case NavDecision.external:
+                launchUrl(
+                  Uri.parse(r.url),
+                  mode: LaunchMode.externalApplication,
+                );
+                return NavigationDecision.prevent;
+              case NavDecision.block:
+                return NavigationDecision.prevent;
+            }
+          },
+          onProgress: (p) => setState(() => _progress = p),
+          onPageStarted: (u) {
+            _current = Uri.tryParse(u) ?? _current;
+            setState(() => _error = null);
+          },
+          onPageFinished: (u) {
+            _current = Uri.tryParse(u) ?? _current;
+            _inject();
+          },
+          onWebResourceError: (e) {
+            if (e.isForMainFrame ?? false) {
+              setState(() => _error = 'Không tải được trang. Kiểm tra mạng.');
+            }
+          },
+        ),
+      );
     _load();
   }
 
@@ -88,7 +101,10 @@ class WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
       _loadedAuth = t.substring(5);
       final login = widget.needsAuth
           ? guestRedirect(
-              current: _current, initialUrl: widget.initialUrl, auth: _loadedAuth)
+              current: _current,
+              initialUrl: widget.initialUrl,
+              auth: _loadedAuth,
+            )
           : null;
       if (login != null) {
         _c.loadRequest(Uri.parse(login));
@@ -133,22 +149,29 @@ class WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+        if (didPop || !widget.active) return;
         if (await _c.canGoBack()) {
           _c.goBack();
+        } else if (widget.onBackAtRoot != null) {
+          widget.onBackAtRoot!();
         } else {
           SystemNavigator.pop();
         }
       },
-      child: Stack(children: [
-        if (_error != null)
-          ErrorView(message: _error!, onRetry: () => _c.reload())
-        else
-          WebViewWidget(controller: _c),
-        if (_progress < 100 && _error == null)
-          LinearProgressIndicator(
-              value: _progress / 100, color: kAccent, minHeight: 2),
-      ]),
+      child: Stack(
+        children: [
+          if (_error != null)
+            ErrorView(message: _error!, onRetry: () => _c.reload())
+          else
+            WebViewWidget(controller: _c),
+          if (_progress < 100 && _error == null)
+            LinearProgressIndicator(
+              value: _progress / 100,
+              color: kAccent,
+              minHeight: 2,
+            ),
+        ],
+      ),
     );
   }
 }

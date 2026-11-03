@@ -1,5 +1,11 @@
 # Net Vip - Lịch sử phiên bản
 
+## 1.0.7
+- Khung chat toàn màn hình kiểu ứng dụng nhắn tin: tiêu đề "Vạn Giới Đàm Đạo", bong bóng tin nhắn, gộp tin liên tiếp của một người, sticker hiện trực tiếp, nút + và nút gửi.
+- Nút Back của điện thoại quay về tab trước đó, chỉ thoát app khi không còn tab trước.
+- Sửa lỗi nhấn Back làm lùi trang ở cả các tab đang ẩn.
+- Tự làm nhiệm vụ: bỏ qua nhiệm vụ đã nhận thưởng, chỉ nhận thưởng nhiệm vụ đã xong, không điểm danh lại khi đã điểm danh.
+
 ## 1.0.6
 - Sửa lỗi đọc truyện tự động không được tính nhiệm vụ: web chặn lượt đọc nếu không gửi từ trang chương. Chương đã đọc trước đó được bỏ qua để đọc chương khác.
 

@@ -4,13 +4,13 @@ const fs = require('fs');
 const assert = require('assert');
 const A = __dirname + '/../assets/inject/';
 
-async function scenario(settings, hadSpin) {
+async function scenario(settings, hadSpin, opts = {}) {
   const b = await chromium.launch();
   const p = await b.newPage();
   await p.route('http://t.local/', r => r.fulfill({ contentType: 'text/html', body:
-    '<input type="hidden" id="hadSpin" value="' + hadSpin + '"><div id="boxLinhThach"></div>' }));
+    '<input type="hidden" id="hadSpin" value="' + hadSpin + '">' + (opts.noCheckin ? '' : '<button id="diemDanhBtn"></button>') + '<div id="boxLinhThach"></div>' }));
   await p.goto('http://t.local/');
-  await p.evaluate(s => {
+  await p.evaluate(([s, st]) => {
     localStorage.setItem('nvq', JSON.stringify(s));
     window.__NVQ_FAST = 1; window.calls = [];
     window.fetch = (u, o) => { window.calls.push('POST ' + u + ' ' + o.body + ' ref=' + o.referrer); return Promise.resolve({ json: () => Promise.resolve({ status: true, counted: true }) }); };
@@ -20,8 +20,8 @@ async function scenario(settings, hadSpin) {
       const done = d => ({ then: f => (f(d), { catch: () => {} }), done: f => (f(d), { fail: () => {} }), fail: () => ({}) });
       let d;
       if (o.url.startsWith('/ajax/user/mission')) d = { data: { daily: [
-          { id: 'daily_mission_1', text: 'Đọc 10 chương truyện', reward: 100, status: 0, progress: '0/10' },
-          { id: 'daily_mission_2', text: 'Bình luận 3 lần (từ 10 ký tự)', reward: 100, status: 0, progress: '0/3' }],
+          { id: 'daily_mission_1', text: 'Đọc 10 chương truyện', reward: 100, status: st.daily_mission_1 ?? 0, progress: '0/10' },
+          { id: 'daily_mission_2', text: 'Bình luận 3 lần (từ 10 ký tự)', reward: 100, status: st.daily_mission_2 ?? 0, progress: '0/3' }],
         weekly: [
           { id: 'weekly_mission_1', text: 'Đăng 1 bài viết trên diễn đàn.', reward: 500, status: 0, progress: '0/1' },
           { id: 'weekly_mission_2', text: 'Bình luận 3 bài viết trên diễn đàn của người khác.', reward: 500, status: 0, progress: '0/3' }] } };
@@ -33,7 +33,7 @@ async function scenario(settings, hadSpin) {
       else d = { status: true, msg: 'ok', rotate: 1 };
       return done(d);
     } };
-  }, settings);
+  }, [settings, opts.status || {}]);
   await p.addStyleTag({ content: fs.readFileSync(A + 'quest.css', 'utf8') });
   await p.evaluate(fs.readFileSync(A + 'quest.js', 'utf8'));
   await p.waitForSelector('#nvqBtn');
@@ -67,6 +67,14 @@ const count = (c, re) => c.filter(x => re.test(x)).length;
   // 4) Hết lượt quay miễn phí: TUYỆT ĐỐI không quay (mất 200 linh thạch)
   c = await scenario({ daily: false, weekly: false, all: true }, 'true');
   assert.strictEqual(count(c, /user\/spin/), 0, 'không quay khi hết lượt miễn phí');
+  // 5b) Nhiệm vụ đã nhận (status 1) thì bỏ qua; xong chờ nhận (status 2) thì chỉ nhận thưởng
+  c = await scenario({ daily: true, weekly: false, all: false }, 'false', { status: { daily_mission_1: 1, daily_mission_2: 2 } });
+  assert.strictEqual(count(c, /manga\/view|comment\/add/), 0, 'không làm lại nhiệm vụ đã xong/đã nhận: ' + JSON.stringify(c));
+  assert.strictEqual(count(c, /missionReward/), 1, 'chỉ nhận thưởng nhiệm vụ chờ nhận');
+  assert.ok(c.some(x => /missionReward.*daily_mission_2/.test(x)));
+  // 5c) Đã điểm danh (không còn nút) thì không điểm danh lại
+  c = await scenario({ daily: false, weekly: false, all: true }, 'false', { noCheckin: true });
+  assert.strictEqual(count(c, /user\/daily/), 0, 'đã điểm danh thì không gọi lại');
   // 5) Tắt hết: không gọi gì
   c = await scenario({ daily: false, weekly: false, all: false }, 'false');
   assert.strictEqual(c.length, 0, 'tắt hết thì không gọi: ' + c.length);

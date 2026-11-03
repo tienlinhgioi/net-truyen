@@ -110,7 +110,8 @@
     var btn = document.getElementById('nvqBtn'); if (btn) btn.className = 'run';
     try {
       if (s.all) {
-        if (s.day.checkin !== today()) { status('Đang điểm danh...'); await post('/ajax/user/daily'); s.day.checkin = today(); save(s); }
+        // Điểm danh xong thì web ẩn nút điểm danh.
+        if (document.getElementById('diemDanhBtn') && s.day.checkin !== today()) { status('Đang điểm danh...'); await post('/ajax/user/daily'); s.day.checkin = today(); save(s); }
         var had = document.getElementById('hadSpin');
         // Hết lượt miễn phí thì tuyệt đối không quay (mất 200 linh thạch).
         if (had && had.value === 'false' && s.day.spin !== today()) { status('Đang quay miễn phí...'); await getJson('/ajax/user/spin'); s.day.spin = today(); save(s); }
@@ -124,7 +125,9 @@
         var mi = list[i][0], key = list[i][1] + mi.id;
         var pr = String(mi.progress || '0/1').split('/'), need = Number(pr[1]) - Number(pr[0]);
         var t = mi.text || '';
-        if (need > 0) {
+        // Trạng thái: 0 chưa xong, 2 xong chờ nhận thưởng, 1 đã nhận (tiến độ khi đó hiện lại 0/x).
+        if (mi.status === 1) continue;
+        if (mi.status === 0 && need > 0) {
           if (/bình luận.*bài viết/i.test(t)) await doForumComment(need, s);
           else if (/bình luận/i.test(t)) await doComment(need, s);
           else if (/đăng.*bài/i.test(t)) await doPost(s);

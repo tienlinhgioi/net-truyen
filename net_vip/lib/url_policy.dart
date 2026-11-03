@@ -14,7 +14,9 @@ bool _hostIs(String host, String domain) =>
     host == domain || host.endsWith('.$domain');
 
 NavDecision decideNavigation(Uri uri) {
-  if (uri.scheme != 'http' && uri.scheme != 'https') return NavDecision.external;
+  if (uri.scheme != 'http' && uri.scheme != 'https') {
+    return NavDecision.external;
+  }
   final host = uri.host.toLowerCase();
   if (_blockedHosts.any((d) => _hostIs(host, d))) return NavDecision.block;
   final base = Uri.parse(kBaseUrl).host;

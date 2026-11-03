@@ -5,6 +5,7 @@ import 'package:net_vip/shell.dart';
 import 'package:net_vip/url_policy.dart';
 import 'package:net_vip/injector.dart';
 import 'package:net_vip/auth_sync.dart';
+import 'package:net_vip/tab_history.dart';
 import 'package:net_vip/guest_redirect.dart';
 import 'package:net_vip/widgets/error_view.dart';
 
@@ -17,26 +18,30 @@ void main() {
 
   testWidgets('ErrorView gọi onRetry', (t) async {
     var n = 0;
-    await t.pumpWidget(MaterialApp(
-        home: ErrorView(message: 'lỗi', onRetry: () => n++)));
+    await t.pumpWidget(
+      MaterialApp(
+        home: ErrorView(message: 'lỗi', onRetry: () => n++),
+      ),
+    );
     await t.tap(find.text('Thử lại'));
     expect(n, 1);
   });
 
-  testWidgets('shell có 5 tab và giữ trạng thái', (t) async {
-    var created = 0;
-    await t.pumpWidget(MaterialApp(
-        home: NetVipShell(buildTab: (u) {
-      created++;
-      return Text(u);
-    })));
-    expect(find.byType(NavigationDestination), findsNWidgets(6));
-    await t.tap(find.text('Chat'));
-    await t.pump();
-    await t.tap(find.text('Trang chủ'));
-    await t.pump();
-    expect(created, 7); // 6 tab + 1 tab nhiệm vụ ẩn
-  });
+  testWidgets(
+    'shell có 6 tab trên thanh dưới, tab không bị tạo lại khi chuyển',
+    (t) async {
+      _Probe.inits = 0;
+      await t.pumpWidget(
+        MaterialApp(home: NetVipShell(buildTab: (u) => _Probe(u))),
+      );
+      expect(find.byType(NavigationDestination), findsNWidgets(6));
+      await t.tap(find.text('Chat'));
+      await t.pump();
+      await t.tap(find.text('Trang chủ'));
+      await t.pump();
+      expect(_Probe.inits, 7); // 6 tab + 1 tab nhiệm vụ ẩn, chỉ tạo một lần
+    },
+  );
 
   test('url policy', () {
     NavDecision d(String u) => decideNavigation(Uri.parse(u));
@@ -66,34 +71,47 @@ void main() {
   });
 
   test('assetsForUrl theo trang', () {
-    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/chat')).js,
-        contains('chat.js'));
-    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/')).js,
-        ['base.js']);
+    expect(
+      assetsForUrl(Uri.parse('https://nettruyen15s.com/chat')).js,
+      contains('chat.js'),
+    );
+    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/')).js, [
+      'base.js',
+    ]);
   });
 
   test('guestRedirect: khách vào tab cần đăng nhập bị đẩy về trang chủ -> sang trang đăng nhập', () {
     final r = guestRedirect(
+      current: Uri.parse('https://nettruyen15s.com/'),
+      initialUrl: 'https://nettruyen15s.com/user/profile',
+      auth: 'out',
+    );
+    expect(
+      r,
+      'https://nettruyen15s.com/auth/login?return=https%3A%2F%2Fnettruyen15s.com%2Fuser%2Fprofile',
+    );
+    expect(
+      guestRedirect(
         current: Uri.parse('https://nettruyen15s.com/'),
         initialUrl: 'https://nettruyen15s.com/user/profile',
-        auth: 'out');
-    expect(r, 'https://nettruyen15s.com/auth/login?return=https%3A%2F%2Fnettruyen15s.com%2Fuser%2Fprofile');
+        auth: '42',
+      ),
+      isNull,
+    );
     expect(
-        guestRedirect(
-            current: Uri.parse('https://nettruyen15s.com/'),
-            initialUrl: 'https://nettruyen15s.com/user/profile',
-            auth: '42'),
-        isNull);
-    expect(
-        guestRedirect(
-            current: Uri.parse('https://nettruyen15s.com/'),
-            initialUrl: 'https://nettruyen15s.com/',
-            auth: 'out'),
-        isNull);
+      guestRedirect(
+        current: Uri.parse('https://nettruyen15s.com/'),
+        initialUrl: 'https://nettruyen15s.com/',
+        auth: 'out',
+      ),
+      isNull,
+    );
   });
 
   testWidgets('bấm Cộng đồng mở menu Diễn đàn và BXH thành viên', (t) async {
-    await t.pumpWidget(MaterialApp(home: NetVipShell(buildTab: (u) => Text(u))));
+    await t.pumpWidget(
+      MaterialApp(home: NetVipShell(buildTab: (u) => Text(u))),
+    );
     await t.tap(find.text('Cộng đồng'));
     await t.pumpAndSettle();
     expect(find.text('Diễn đàn'), findsOneWidget);
@@ -101,11 +119,57 @@ void main() {
     expect(find.text('Nhiệm vụ (Linh thạch)'), findsOneWidget);
   });
 
-  test('assetsForUrl: trang linh thạch có quest.js, hồ sơ thường thì không', () {
-    expect(
-        assetsForUrl(Uri.parse('https://nettruyen15s.com/user/profile?tab=linh-thach')).js,
-        contains('quest.js'));
-    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/user/profile')).js,
-        isNot(contains('quest.js')));
+  test(
+    'assetsForUrl: trang linh thạch có quest.js, hồ sơ thường thì không',
+    () {
+      expect(
+        assetsForUrl(
+          Uri.parse('https://nettruyen15s.com/user/profile?tab=linh-thach'),
+        ).js,
+        contains('quest.js'),
+      );
+      expect(
+        assetsForUrl(Uri.parse('https://nettruyen15s.com/user/profile')).js,
+        isNot(contains('quest.js')),
+      );
+    },
+  );
+
+  test('TabHistory: Back quay về tab trước, hết thì trả null', () {
+    final h = TabHistory(0);
+    h.select(3); // Trang chủ -> Chat
+    h.select(4); // -> Tài khoản
+    expect(h.back(), 3);
+    expect(h.back(), 0);
+    expect(h.back(), isNull);
+    expect(h.current, 0);
   });
+
+  test('TabHistory: chọn lại tab cũ không tạo vòng lặp', () {
+    final h = TabHistory(0);
+    h.select(1);
+    h.select(0);
+    h.select(1);
+    expect(h.back(), 0);
+    expect(h.back(), isNull);
+  });
+}
+
+class _Probe extends StatefulWidget {
+  const _Probe(this.url);
+  final String url;
+  static int inits = 0;
+  @override
+  State<_Probe> createState() => _ProbeState();
+}
+
+class _ProbeState extends State<_Probe> {
+  @override
+  void initState() {
+    super.initState();
+    _Probe.inits++;
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(widget.url);
 }

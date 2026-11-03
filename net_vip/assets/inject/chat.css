@@ -1,4 +1,3 @@
-.chat-board .form-group { position: relative; flex-wrap: wrap; }
 #btnEmoji { margin-right: 5px; }
 #nvEmoji { display: none; position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 6px;
   background: #1e1e1e; border: 1px solid #444; border-radius: 8px; z-index: 50; box-shadow: 0 -4px 16px rgba(0,0,0,.5); }
@@ -9,8 +8,53 @@
 #nvEmoji .tabs img.on { opacity: 1; background: #333; }
 #nvEmoji .grid { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; max-height: 220px; overflow-y: auto; }
 #nvEmoji .grid img { height: 56px; width: 56px; object-fit: contain; }
-#nvChips { order: -1; flex-wrap: wrap; gap: 6px; padding: 6px 0; width: 100%; }
+#nvChips { flex-wrap: wrap; gap: 6px; padding: 2px 0; }
 #nvChips .chip { position: relative; display: inline-block; background: #1e1e1e; border: 1px solid #444; border-radius: 6px; padding: 2px; }
 #nvChips .chip img { height: 44px; width: 44px; object-fit: contain; display: block; }
 #nvChips .chip .x { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; line-height: 18px; text-align: center;
   background: #d9534f; color: #fff; border-radius: 50%; font-size: 14px; }
+
+/* ===== Khung chat toàn màn hình ===== */
+html, body { overflow: hidden !important; background: #0f1424 !important; }
+.chat-board { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; width: auto !important; height: auto !important; max-height: none !important; z-index: 9990; display: flex !important; flex-direction: column;
+  background: #0f1424; color: #e8ecf8; margin: 0 !important; padding: 0 !important; }
+#nvChatHeader { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #131a30; border-bottom: 1px solid #222c4a; }
+#nvChatHeader .ico { width: 44px; height: 44px; border-radius: 50%; background: #1b2a55; color: #4d8dff; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+#nvChatHeader .t { font-size: 18px; font-weight: 700; color: #fff; line-height: 1.2; }
+#nvChatHeader .s { font-size: 13px; color: #9aa6c8; }
+#nvChatHeader .s::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #3ecf5a; margin-right: 6px; }
+
+#listMessages { flex: 1 1 auto; min-height: 0; max-height: none !important; height: auto !important; overflow-y: auto; margin: 0 !important; padding: 8px 12px 12px !important; list-style: none !important; -webkit-overflow-scrolling: touch; }
+#listMessages li { display: grid !important; grid-template-columns: 44px 1fr; grid-template-areas: "av info" "av msg"; column-gap: 10px; margin: 12px 0 0 !important; padding: 0 !important; border: 0 !important; background: none !important; }
+#listMessages li.cont { margin-top: 3px !important; }
+#listMessages li.cont a.avatar, #listMessages li.cont .info { display: none !important; }
+#listMessages li a.avatar { grid-area: av; position: relative; width: 44px; height: 44px; align-self: start; margin: 0 !important; float: none !important; }
+#listMessages li a.avatar img { width: 44px !important; height: 44px !important; object-fit: cover; }
+#listMessages li a.avatar img.frame { position: absolute; inset: 0; }
+#listMessages li .info { grid-area: info; display: flex !important; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 !important; padding: 0 !important; width: auto !important; float: none !important; }
+#listMessages li .info .top { display: flex; align-items: center; gap: 6px; margin: 0 !important; }
+#listMessages li .info .top .name { color: #dfe5f7 !important; font-weight: 700; font-size: 15px; }
+#listMessages li .info time { color: #7f8bb0 !important; font-size: 11px; margin: 0 !important; }
+#listMessages li .member { position: relative; overflow: hidden; border: 0 !important; background: rgba(255,150,1,.18) !important; color: #ffa726 !important;
+  border-radius: 12px; padding: 1px 9px !important; font-size: 12px !important; line-height: 18px; height: auto !important; width: auto !important; }
+#listMessages li .member .progress-bar { display: none !important; }
+#listMessages li p { grid-area: msg; justify-self: start; max-width: 88%; margin: 4px 0 0 !important; padding: 9px 15px !important; border-radius: 18px;
+  background: #1f2b4a; color: #fff !important; font-size: 16px; line-height: 1.35; word-break: break-word; width: auto !important; float: none !important; }
+#listMessages li p:empty { display: none; }
+#listMessages li p.imgonly { background: none; padding: 0 !important; }
+#listMessages li p img[id^="chat-img-"] { margin-top: 6px; }
+#listMessages li p.imgonly img[id^="chat-img-"] { margin-top: 0; }
+#listMessages li p img[id^="chat-img-"] { display: block; max-width: 170px; max-height: 170px; border-radius: 16px; }
+#listMessages li p .btn-info { border-radius: 16px; padding: 4px 14px; }
+
+.chat-board .form-group { flex: none; position: relative; display: flex !important; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 0 !important; padding: 10px 12px !important; background: #1a2342; border-top: 1px solid #222c4a; }
+.chat-board .form-group #btnMore, .chat-board .form-group #btnEmoji, #nvSend { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; padding: 0 !important;
+  display: flex; align-items: center; justify-content: center; margin: 0 !important; }
+.chat-board .form-group #btnMore { background: #2d6bff !important; font-size: 0 !important; }
+.chat-board .form-group #btnMore::before { content: '+'; font-size: 30px; line-height: 1; color: #fff; }
+.chat-board .form-group #btnEmoji { background: #2a3566 !important; font-size: 20px; }
+.chat-board .form-group #txtMessage { flex: 1; min-width: 0; height: 44px; border-radius: 22px !important; border: 0 !important; background: #0f1424 !important; color: #fff !important; padding: 0 18px !important; font-size: 16px; box-shadow: none !important; }
+#nvSend { background: none; color: #2d6bff; font-size: 26px; }
+#moreMenu { bottom: 62px !important; top: auto !important; left: 12px !important; background: #1a2342 !important; border: 1px solid #2b3764 !important; border-radius: 12px; }
+#nvChips { order: -1; width: 100%; }

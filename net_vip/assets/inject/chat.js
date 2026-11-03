@@ -90,4 +90,48 @@ if (!window.__nvChat) {
     var a = document.querySelectorAll('#listMessages a[id^="view-img-btn-"]');
     for (var i = 0; i < a.length; i++) a[i].click();
   }, 800);
+
+  // ===== Giao diện chat toàn màn hình =====
+  var nameOf = function (li) { var a = li.querySelector('.info .name'); return a ? a.getAttribute('href') : null; };
+  var group = function () {
+    var items = document.querySelectorAll('#listMessages > li'), prev = null;
+    for (var i = 0; i < items.length; i++) {
+      var n = nameOf(items[i]);
+      var cont = !!n && n === prev;
+      if (cont !== items[i].classList.contains('cont')) items[i].classList.toggle('cont', cont);
+      prev = n;
+      // Tin chỉ có ảnh/sticker (không có chữ) thì bỏ khung bong bóng.
+      var p = items[i].querySelector('p');
+      if (p) {
+        var txt = '';
+        for (var k = 0; k < p.childNodes.length; k++) if (p.childNodes[k].nodeType === 3) txt += p.childNodes[k].nodeValue;
+        var only = !txt.trim() && !!p.querySelector('img');
+        if (only !== p.classList.contains('imgonly')) p.classList.toggle('imgonly', only);
+      }
+    }
+  };
+  var dress = function () {
+    var board = document.querySelector('.chat-board'), txt = document.getElementById('txtMessage');
+    if (!board || board.getAttribute('data-nv')) return;
+    board.setAttribute('data-nv', '1');
+    var h = document.createElement('div'); h.id = 'nvChatHeader';
+    h.innerHTML = '<div class="ico">💬</div><div><div class="t">Vạn Giới Đàm Đạo</div><div class="s">Đang trực tuyến</div></div>';
+    board.insertBefore(h, board.firstChild);
+    if (txt) {
+      var send = document.createElement('button');
+      send.type = 'button'; send.id = 'nvSend'; send.textContent = '➤';
+      send.onclick = function () { txt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
+      txt.parentNode.appendChild(send);
+    }
+  };
+  setInterval(function () {
+    dress();
+    var list = document.getElementById('listMessages');
+    if (!list) return;
+    var near = list.scrollHeight - list.scrollTop - list.clientHeight < 140;
+    var before = list.children.length;
+    group();
+    if (near && list.children.length !== window.__nvCount) list.scrollTop = list.scrollHeight;
+    window.__nvCount = list.children.length;
+  }, 600);
 }

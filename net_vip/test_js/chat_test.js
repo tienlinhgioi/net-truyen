@@ -7,7 +7,11 @@ const assert = require('assert');
   const b = await chromium.launch();
   const p = await b.newPage();
   await p.route('http://t.local/', r => r.fulfill({ contentType: 'text/html', body:
-    '<ul id="listMessages"><li><a class="btn btn-info" id="view-img-btn-1" onclick="window.clicked=1">Xem</a></li></ul>' +
+    '<ul id="listMessages"><li><a class="btn btn-info" id="view-img-btn-1" onclick="window.clicked=1">Xem</a></li>' +
+    '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/1">A</a></div><p>xin chào</p></li>' +
+    '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/1">A</a></div><p>tin 2</p></li>' +
+    '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/2">B</a></div><p>chữ <img id="chat-img-9" src="x"></p></li>' +
+    '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/2">B</a></div><p><img id="chat-img-10" src="x"></p></li></ul>' +
     '<div class="chat-board"><div class="form-group"><button id="btnMore">m</button><input id="txtMessage"></div></div>' }));
   await p.goto('http://t.local/');
   await p.evaluate(() => {
@@ -48,6 +52,19 @@ const assert = require('assert');
   await p.waitForTimeout(200);
   assert.deepStrictEqual(await p.evaluate(() => window.alerts), ['Quá số lượng']);
   assert.strictEqual(await p.locator('#nvChips .chip').count(), 1, 'lỗi thì giữ chip');
+  // Giao diện toàn màn hình: tiêu đề, nút gửi, gộp tin cùng người, tin chỉ có ảnh bỏ bong bóng
+  await p.waitForTimeout(900);
+  assert.strictEqual(await p.locator('#nvChatHeader .t').innerText(), 'Vạn Giới Đàm Đạo');
+  assert.strictEqual(await p.locator('#nvSend').count(), 1, 'có nút gửi');
+  const cls = await p.evaluate(() => [...document.querySelectorAll('#listMessages li')].map(l => l.className));
+  assert.deepStrictEqual(cls.slice(1), ['', 'cont', '', 'cont'], 'gộp tin liên tiếp của cùng một người: ' + JSON.stringify(cls));
+  const imgonly = await p.evaluate(() => [...document.querySelectorAll('#listMessages li p')].map(x => x.classList.contains('imgonly')));
+  assert.deepStrictEqual(imgonly, [false, false, false, true], 'chỉ tin thuần ảnh mới bỏ bong bóng');
+  // bấm nút gửi (không có sticker) kích hoạt Enter như bàn phím
+  await p.evaluate(() => document.querySelector('#nvChips .chip .x').click());
+  const before = await p.evaluate(() => window.webEnter);
+  await p.click('#nvSend');
+  assert.strictEqual(await p.evaluate(() => window.webEnter), before + 1, 'nút gửi = Enter');
   console.log('chat_test: PASS');
   await b.close();
 })().catch(e => { console.error('FAIL', e.message); process.exit(1); });

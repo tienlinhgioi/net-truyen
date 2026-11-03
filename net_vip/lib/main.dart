@@ -27,11 +27,11 @@ class _NetVipAppState extends State<NetVipApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Net Vip',
-        debugShowCheckedModeBanner: false,
-        theme: netVipTheme(),
-        home: _ready
-            ? (widget.shellBuilder ?? (_) => const NetVipShell())(context)
-            : const Scaffold(body: Splash()),
-      );
+    title: 'Net Vip',
+    debugShowCheckedModeBanner: false,
+    theme: netVipTheme(),
+    home: _ready
+        ? (widget.shellBuilder ?? (_) => const NetVipShell())(context)
+        : const Scaffold(body: Splash()),
+  );
 }
