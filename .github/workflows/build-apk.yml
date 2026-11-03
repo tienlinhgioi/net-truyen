@@ -4,6 +4,8 @@ on:
     branches: [main, 'claude/**']
     paths: ['net_vip/**', '.github/workflows/build-apk.yml']
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,3 +41,15 @@ jobs:
         with:
           name: net-vip-${{ steps.ver.outputs.v }}
           path: net_vip/build/app/outputs/flutter-apk/*.apk
+      - name: Phát hành bản tải lẻ (chỉ nhánh main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.ver.outputs.v }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk net-vip.apk
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            gh release upload "v$VER" net-vip.apk --clobber
+          else
+            gh release create "v$VER" net-vip.apk --title "Net Vip $VER" --notes "Net Vip $VER (arm64)" --latest
+          fi
