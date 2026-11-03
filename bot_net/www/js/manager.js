@@ -7,6 +7,7 @@ import { LimitBook, percentOf, quotaDay } from './core/limits.js';
 import { ModelHealth } from './core/combo.js';
 import { parseDirective } from './core/directive.js';
 import { UserMemory } from './core/convo.js';
+import { RoomFeed } from './core/feed.js';
 import { comboFor, filterForRole, rankModels } from './core/combo.js';
 import { KeyPool } from './core/keys.js';
 
@@ -16,6 +17,7 @@ export class Manager {
     this.http = http; this.service = service; this.sleep = sleep; this.loadStickers = loadStickers;
     this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.limits = new LimitBook(); this.plans = {}; this.svcKey = null; this.paused = []; this.suspended = [];
     this.bots = new Map();
+    this.feed = new RoomFeed({ maxAgeMs: 600 }); // các tài khoản cùng phòng chia sẻ một lần quét
     this.botSet = new BotSet();
     this.logs = [];
     this.usage = {};
@@ -76,7 +78,7 @@ export class Manager {
     if (this.bots.has(account.id)) return;
     const bot = new AccountBot({
       account, getSettings: () => this.store.settings, http: this.http, bots: this.botSet,
-      sleep: this.sleep, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
+      sleep: this.sleep, feed: this.feed, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
       onRecord: (key, model, tokens) => this.recordUsage(key, model, tokens),
       quotaPct: (model) => this.modelPercent(account, model),
       onLimit: (model, l, ctx) => { this.#learnLimit(model, l, ctx?.key, ctx?.plan); this.emit('keys'); },

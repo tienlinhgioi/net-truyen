@@ -1,5 +1,11 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.12
+- Sửa lỗi chat cập nhật chậm. Đo thật: mỗi lần quét chat mất khoảng 0,5 giây (máy chủ Cloudflare, 36 KB đã nén), web không hỗ trợ chỉ lấy tin mới, web gốc tự quét mỗi 1 giây. Nguyên nhân trong app: (1) mỗi tài khoản chỉ có MỘT vòng lặp vừa quét vừa trả lời, nên lúc đang "gõ", chờ khoảng cách giữa hai tin hay hỏi Gemini thì không quét chat, tin mới bị trễ hàng chục giây (đo: lần quét bị dừng 792ms khi nhịp chuẩn là 100ms); (2) thời gian quét bị cộng thêm vào thời gian nghỉ nên chu kỳ thật dài hơn đặt; (3) mỗi tài khoản quét riêng cùng một phòng.
+- Giờ vòng quét và vòng trả lời chạy song song nên nhịp quét luôn đều (đo lại: lần quét lâu nhất khi bận còn 122ms trên nhịp chuẩn 100ms). Chu kỳ tính đúng: thời gian quét được trừ vào thời gian nghỉ. Nhịp quét mặc định 1 giây (như web), 0,7 giây khi đang trò chuyện.
+- Các tài khoản cùng phòng chia sẻ chung một lần quét thay vì mỗi tài khoản quét riêng (ít yêu cầu hơn, nhanh hơn khi chạy nhiều tài khoản). Lần quét chung lỗi thì từng tài khoản tự quét bằng phiên của mình.
+- Mỗi yêu cầu có giới hạn thời gian (quét chat 8 giây, gửi tin 15 giây) để một yêu cầu treo không chặn cả vòng quét.
+
 ## 1.0.11
 - Sửa gửi truyện không ổn. Nguyên nhân (đo trên web thật): bot lấy kết quả đầu tiên của ô tìm kiếm, mà web không xếp theo độ khớp tên (tìm "naruto" ra *Renge To Naruto!* trước *Naruto*), và tìm không dấu ("vo luyen dinh phong") ra rỗng.
 - Giờ bot chọn truyện khớp nhất: khớp hệt tên, rồi chứa đủ từ khóa mà ít từ thừa nhất; nhiều kết quả mà không cái nào liên quan thì không đoán bừa. Gemini được dặn viết tên truyện đúng như hiển thị ở web tiếng Việt (có dấu) kèm tên khác sau dấu | để thử lần lượt.

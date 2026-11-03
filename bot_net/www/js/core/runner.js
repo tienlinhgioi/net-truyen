@@ -46,11 +46,11 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
 }
 
 export class AccountBot {
-  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onPlan = null, onRecord = null, quotaPct = () => null, log = () => {}, save = () => {} }) {
+  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onPlan = null, onRecord = null, quotaPct = () => null, feed = null, log = () => {}, save = () => {} }) {
     this.account = account; this.getSettings = getSettings; this.http = http; this.bots = bots;
     this.now = now; this.nowMs = () => now().getTime(); this.sleep = sleep; this.rand = rand; this.stickers = stickers; this.memory = memory;
     this.log = (text, level = 'info') => log({ t: Date.now(), level, text, acc: account.id });
-    this.saveAcc = save; this.onLimit = onLimit; this.onPlan = onPlan; this.quotaPct = quotaPct;
+    this.saveAcc = save; this.feed = feed; this.draining = false; this.onLimit = onLimit; this.onPlan = onPlan; this.quotaPct = quotaPct;
     this.client = new ChatClient({ http, jar: CookieJar.from(account.cookies) });
     this.pool = new KeyPool(account.keys || [], { onRecord });
     this.health = new ModelHealth({ now: this.nowMs });
@@ -131,22 +131,23 @@ export class AccountBot {
     return this.proTimes.length < (st.proactiveMaxPerHour ?? 6);
   }
 
-  async tick() {
-    if (this.stopped) return;
+  /** Một vòng quét: kiểm tra lịch, đọc chat, xếp việc. KHÔNG trả lời (việc đó do vòng trả lời riêng làm). Trả về true nếu đã quét. */
+  async poll() {
+    if (this.stopped) return false;
     const st = this.getSettings();
-    if (!isActive(this.now(), st.schedule)) return;
+    if (!isActive(this.now(), st.schedule)) return false;
     if (!this.client.jar.header()) {
-      try { await this.connect(); } catch (e) { this.log(e.message, 'error'); this.stats.errors++; await this.sleep(st.reconnectDelayMs); return; }
+      try { await this.connect(); } catch (e) { this.log(e.message, 'error'); this.stats.errors++; await this.sleep(st.reconnectDelayMs); return false; }
     }
     let list;
-    try { list = await this.client.listChat(); } catch {
+    try { list = await (this.feed ? this.feed.get(() => this.client.listChat()) : this.client.listChat()); } catch {
       this.log('Mất kết nối, sẽ đăng nhập lại', 'warn');
       this.client.jar = new CookieJar();
       await this.sleep(st.reconnectDelayMs);
-      return;
+      return false;
     }
     if (this.nowMs() - this.lastProfileAt > (st.profileRefreshMs ?? 1800000) && this.lastProfileAt) await this.refreshProfile();
-    if (this.stopped) return;
+    if (this.stopped) return false;
     this.#learn(list);
     this.convo.setWindow(st.convoWindowMs ?? 180000);
     const allow = this.account.proactive !== false;
@@ -164,7 +165,12 @@ export class AccountBot {
       if (!this.pending.some((p) => p.id === t.id)) this.pending.push(t);
     }
     this.#maybeStarter(st, list);
-    await this.#drain(st);
+    return true;
+  }
+
+  /** Quét rồi trả lời lần lượt (dùng cho test và chạy một vòng). Khi chạy thật, vòng quét và vòng trả lời chạy song song. */
+  async tick() {
+    if (await this.poll()) await this.#drain(this.getSettings());
   }
 
   /** Phòng im lặng lâu thì thỉnh thoảng mở một chủ đề (nếu bật). */
@@ -213,6 +219,12 @@ export class AccountBot {
 
 
   async #drain(st) {
+    if (this.draining) return;
+    this.draining = true;
+    try { await this.#drainLoop(st); } finally { this.draining = false; }
+  }
+
+  async #drainLoop(st) {
     while (this.pending.length && !this.stopped) {
       const task = this.pending[0];
       let result;
@@ -380,15 +392,28 @@ export class AccountBot {
     return false;
   }
 
+  /**
+   * Chạy liên tục. Hai vòng song song: vòng quét giữ nhịp đều (không bị chặn khi bot đang gõ/chờ/gửi tin) và
+   * vòng trả lời lần lượt xử lý hàng đợi.
+   */
   async start() {
     this.stopped = false;
     this.running = true;
+    const worker = (async () => {
+      while (this.running) {
+        if (this.pending.length) { try { await this.#drain(this.getSettings()); } catch (e) { this.log(`Lỗi: ${e.message}`, 'error'); } }
+        await this.sleep(150);
+      }
+    })();
     while (this.running) {
-      try { await this.tick(); } catch (e) { this.log(`Lỗi: ${e.message}`, 'error'); }
+      const t0 = this.nowMs();
+      try { await this.poll(); } catch (e) { this.log(`Lỗi: ${e.message}`, 'error'); }
       const st = this.getSettings();
       const busy = this.pending.length || this.nowMs() - this.lastSendAt < 60000;
-      await this.sleep(busy ? Math.min(st.pollMs, 1000) : st.pollMs);
+      const target = busy ? Math.min(st.pollMs, 700) : st.pollMs;
+      await this.sleep(Math.max(100, target - (this.nowMs() - t0))); // nhịp đều: trừ thời gian quét vào thời gian nghỉ
     }
+    await worker;
   }
 
   /** Tắt hẳn: vòng lặp dừng, hàng đợi bị hủy, lượt đang xử lý dở cũng không gửi thêm tin nào. */

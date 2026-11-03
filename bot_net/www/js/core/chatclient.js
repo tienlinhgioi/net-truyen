@@ -17,20 +17,20 @@ export class ChatClient {
     this.http = http; this.base = base; this.jar = jar;
   }
 
-  async #req(method, path, data, extra = {}) {
+  async #req(method, path, data, extra = {}, timeout = 15000) {
     const headers = { 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36', ...extra };
     const cookie = this.jar.header();
     if (cookie) headers.Cookie = cookie;
     if (data !== undefined) headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
-    const res = await this.http({ url: this.base + path, method, headers, data: data === undefined ? undefined : form(data) });
+    const res = await this.http({ url: this.base + path, method, headers, data: data === undefined ? undefined : form(data), timeout });
     const sc = Object.entries(res.headers || {}).find(([k]) => k.toLowerCase() === 'set-cookie')?.[1];
     this.jar.update(sc);
     return { ...res, data: res.data };
   }
 
   async login(email, password) {
-    await this.#req('GET', '/auth/login');
-    const r = await this.#req('POST', '/ajax/auth/login', { email, password });
+    await this.#req('GET', '/auth/login', undefined, {}, 20000);
+    const r = await this.#req('POST', '/ajax/auth/login', { email, password }, {}, 20000);
     const d = json(r.data);
     return d.status ? { ok: true, msg: d.msg } : { ok: false, msg: d.msg || `Lỗi ${r.status}` };
   }
@@ -41,7 +41,7 @@ export class ChatClient {
   }
 
   async listChat() {
-    const r = await this.#req('GET', '/ajax/chat/list');
+    const r = await this.#req('GET', '/ajax/chat/list', undefined, {}, 8000); // yêu cầu treo không được chặn cả vòng quét
     const d = json(r.data);
     if (r.status !== 200 || !d.status) throw Object.assign(new Error('chat-list'), { status: r.status });
     return d.data || [];
@@ -49,7 +49,7 @@ export class ChatClient {
 
   /** Tìm truyện theo tên (như ô tìm kiếm của nút Gửi truyện). */
   async searchManga(q) {
-    const r = await this.#req('POST', '/ajax/search', { search: q });
+    const r = await this.#req('POST', '/ajax/search', { search: q }, {}, 10000);
     const d = json(r.data);
     return (d.list || []).map((m) => ({ slug: String(m.url || '').split('/manga/')[1] || '', name: m.name })).filter((m) => m.slug);
   }
@@ -70,7 +70,7 @@ export class ChatClient {
   }
 
   async sendChat(message) {
-    const r = await this.#req('POST', '/ajax/chat/send', { message, reply_id: '' });
+    const r = await this.#req('POST', '/ajax/chat/send', { message, reply_id: '' }, {}, 15000);
     const d = json(r.data);
     return { ok: !!d.status, msg: d.message ?? d.msg };
   }
