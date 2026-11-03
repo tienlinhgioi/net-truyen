@@ -11,6 +11,7 @@ import { parseDirective } from './directive.js';
 import { pickSticker, ImageQuota } from './media.js';
 import { moodFor, typingDelayMs, splitReply, isRepeat, sensitiveHit } from './persona.js';
 import { needsKnowledge, knowledgeQuery, wikiSearch, searchPhoto } from './web.js';
+import { rankManga, mangaQueries } from './manga.js';
 import { ConvoTracker, UserMemory } from './convo.js';
 
 /** Tập các tài khoản bot (theo user_id chat hoặc tên hiển thị) để chống vòng lặp. */
@@ -40,7 +41,7 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
     mood,
     notes.length ? `Điều bạn đã biết về người đang nói chuyện: ${notes.join('; ')}.` : '',
     'Luôn trả về DUY NHẤT một JSON: {"reply":"nội dung nhắn","sticker":false,"draw":"","photo":"","manga":"","remember":""}.',
-    'Nếu có phần "Thông tin tham khảo" thì dựa vào đó để trả lời đúng sự thật, tóm tắt ngắn bằng giọng của bạn, không chép nguyên văn. "sticker": true thỉnh thoảng khi hợp ngữ cảnh. "draw": chỉ điền mô tả ảnh khi người ta nhờ vẽ/tạo ảnh bằng AI. "photo": từ khóa tiếng Anh ngắn để tìm một ẢNH CÓ THẬT trên mạng khi người ta nhờ cho xem/gửi ảnh của một thứ có thật (động vật, cảnh vật, đồ vật...). "manga": chỉ điền tên truyện khi người ta nhờ gửi/giới thiệu một truyện cụ thể. "remember": một điều ngắn đáng nhớ về người đối thoại (nếu có).',
+    'Nếu có phần "Thông tin tham khảo" thì dựa vào đó để trả lời đúng sự thật, tóm tắt ngắn bằng giọng của bạn, không chép nguyên văn. "sticker": true thỉnh thoảng khi hợp ngữ cảnh. "draw": chỉ điền mô tả ảnh khi người ta nhờ vẽ/tạo ảnh bằng AI. "photo": từ khóa tiếng Anh ngắn để tìm một ẢNH CÓ THẬT trên mạng khi người ta nhờ cho xem/gửi ảnh của một thứ có thật (động vật, cảnh vật, đồ vật...). "manga": chỉ điền khi người ta nhờ gửi/giới thiệu một truyện cụ thể; viết tên truyện ĐÚNG như hiển thị ở web đọc truyện tiếng Việt (có dấu), có thể thêm tên khác sau dấu | (ví dụ "Tôi Thăng Cấp Một Mình | Solo Leveling"). "remember": một điều ngắn đáng nhớ về người đối thoại (nếu có).',
   ].filter(Boolean).join('\n');
 }
 
@@ -56,7 +57,7 @@ export class AccountBot {
     this.convo = new ConvoTracker({ now: this.nowMs });
     this.lastId = null; this.pending = []; this.lastSentTexts = []; this.mult = 1; this.running = false;
     this.stopped = false; this.sentNorms = new Set(); this.botReplyAt = new Map();
-    this.lastSendAt = 0; this.lastProfileAt = 0; this.lastStarterAt = 0; this.recent = []; this.proTimes = []; this.wikiTimes = [];
+    this.lastSendAt = 0; this.lastProfileAt = 0; this.lastStarterAt = 0; this.recent = []; this.proTimes = []; this.wikiTimes = []; this.recentManga = new Map();
     this.stats = account.stats || (account.stats = { sent: 0, errors: 0, lastAt: 0, days: {} });
     this.stats.days ??= {};
     bots.add(account);
@@ -335,11 +336,27 @@ export class AccountBot {
   }
 
   async #sendManga(name, st) {
-    let found;
-    try { found = (await this.client.searchManga(name))[0]; } catch { found = null; }
-    if (!found) { this.log(`Không tìm thấy truyện "${name}"`, 'warn'); return false; }
+    const queries = mangaQueries(name);
+    let found = null;
+    for (const q of queries) {
+      let list = [];
+      for (let attempt = 0; attempt < 2; attempt++) { try { list = await this.client.searchManga(q); break; } catch { /* thử lại một lần */ } }
+      found = rankManga(list, q);
+      if (found) break;
+    }
+    if (!found) {
+      this.log(`Không tìm thấy truyện "${name}"`, 'warn');
+      await this.#waitToSend(30, this.nowMs(), st);
+      return this.#send(`Mình không tìm thấy truyện "${queries[0] || name}" trên web này 😅`, st); // báo cho người hỏi thay vì im lặng
+    }
+    const last = this.recentManga.get(found.slug) || 0;
+    if (this.nowMs() - last < 600000) { this.log(`Bỏ qua: vừa gửi truyện "${found.name}" cách đây chưa đến 10 phút`, 'warn'); return false; }
     await this.#waitToSend(8, this.nowMs(), st);
-    if (await this.#send(`[MANGA=${found.slug}]`, st)) { this.#bump('mangas'); return true; }
+    if (await this.#send(`[MANGA=${found.slug}]`, st)) {
+      this.recentManga.set(found.slug, this.nowMs()); this.#bump('mangas');
+      this.log(`Gửi truyện: ${found.name}`);
+      return true;
+    }
     return false;
   }
 

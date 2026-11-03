@@ -1,5 +1,10 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.11
+- Sửa gửi truyện không ổn. Nguyên nhân (đo trên web thật): bot lấy kết quả đầu tiên của ô tìm kiếm, mà web không xếp theo độ khớp tên (tìm "naruto" ra *Renge To Naruto!* trước *Naruto*), và tìm không dấu ("vo luyen dinh phong") ra rỗng.
+- Giờ bot chọn truyện khớp nhất: khớp hệt tên, rồi chứa đủ từ khóa mà ít từ thừa nhất; nhiều kết quả mà không cái nào liên quan thì không đoán bừa. Gemini được dặn viết tên truyện đúng như hiển thị ở web tiếng Việt (có dấu) kèm tên khác sau dấu | để thử lần lượt.
+- Tìm không ra thì bot báo "không tìm thấy truyện ..." thay vì nói "nè bạn" rồi im lặng. Không gửi lại cùng một truyện trong 10 phút.
+
 ## 1.0.10
 - Cho AI truy cập internet: câu hỏi kiến thức ("... là gì", "ai là...", "ở đâu"...) được tra Wikipedia (tiếng Việt rồi tiếng Anh) và đưa tóm tắt cho Gemini làm tư liệu, vẫn chỉ 1 lượt Gemini mỗi câu hỏi. Khi có người nhờ xem ảnh thật, bot tìm ảnh Creative Commons trên Openverse (đã lọc nội dung người lớn) và gửi vào chat. Cả hai miễn phí, không cần khóa, có giới hạn mỗi giờ/ngày chỉnh được trong Cài đặt, và có thể tắt. Google Search của Gemini không dùng được ở gói miễn phí (luôn 429) nên không dùng.
 - Trí nhớ của AI: xem các ghi chú bot đã nhớ về từng người chat, bảo bot quên từng người; "Nạp lại prompt mới cho AI ngay"; "Xóa ghi chú cũ và nạp lại AI từ đầu" (mỗi tài khoản) và xóa ghi chú cũ của tất cả tài khoản trong Cài đặt.

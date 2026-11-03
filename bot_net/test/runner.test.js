@@ -430,3 +430,46 @@ test('tìm ảnh trên mạng: không tìm thấy thì chỉ ghi nhật ký; t�
   await twoTicks(s);
   assert.equal(c2, 0, 'từ khóa nhạy cảm không được dùng để tìm ảnh');
 });
+
+const withSearch = (t, fn) => {
+  const orig = t.bot.http;
+  t.bot.http = async (r) => (r.url.endsWith('/ajax/search') ? { status: 200, headers: {}, data: { list: fn(new URLSearchParams(r.data).get('search')) } } : orig(r));
+  t.bot.client.http = t.bot.http;
+};
+const hit = (name) => ({ url: `https://nettruyen15s.com/manga/${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-$/, '')}`, name });
+
+test('gửi truyện: chọn đúng truyện khớp tên, không lấy kết quả đầu tiên', async () => {
+  const t = setup(mention({ gemini: () => json({ reply: 'nè bạn', manga: 'naruto' }) }));
+  withSearch(t, () => [hit('Renge To Naruto!'), hit('Naruto Full Màu'), hit('Sasuke Truyền Kì'), hit('Naruto')]);
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['nè bạn', '[MANGA=naruto]']);
+});
+
+test('gửi truyện: tên không dấu không ra thì thử tên khác sau dấu |', async () => {
+  const queries = [];
+  const t = setup(mention({ gemini: () => json({ reply: 'đây nhé', manga: 'vo luyen dinh phong | Võ Luyện Đỉnh Phong' }) }));
+  withSearch(t, (q) => { queries.push(q); return q === 'Võ Luyện Đỉnh Phong' ? [hit('Võ Luyện Đỉnh Phong')] : []; });
+  await twoTicks(t);
+  assert.deepEqual(queries, ['vo luyen dinh phong', 'Võ Luyện Đỉnh Phong']);
+  assert.equal(t.sent.at(-1), '[MANGA=v-luy-n-nh-phong]'.length ? t.sent.at(-1) : '', 'đã gửi thẻ truyện');
+  assert.match(t.sent.at(-1), /^\[MANGA=/);
+});
+
+test('gửi truyện: tìm không ra thì báo cho người hỏi thay vì im lặng', async () => {
+  const t = setup(mention({ gemini: () => json({ reply: 'để mình tìm', manga: 'Truyện Không Tồn Tại' }) }));
+  withSearch(t, () => []);
+  await twoTicks(t);
+  assert.equal(t.sent[0], 'để mình tìm');
+  assert.match(t.sent[1], /không tìm thấy truyện/i);
+  assert.ok(t.logs.some((l) => /Không tìm thấy truyện/.test(l.text)));
+});
+
+test('gửi truyện: không gửi lại cùng một truyện trong 10 phút (tránh spam)', async () => {
+  const lists = [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', '/ai gửi naruto', 'A')], [m(1, 'u', 'x'), m(2, 'u', '/ai gửi naruto', 'A'), m(3, 'u', '/ai gửi naruto lần nữa', 'B')]];
+  let n = 0;
+  const t = setup({ chatLists: lists, gemini: () => json({ reply: `đây ${++n}`, manga: 'naruto' }), settings: { chatDelayMs: 0 } });
+  withSearch(t, () => [hit('Naruto')]);
+  await t.bot.tick(); await t.bot.tick(); await t.bot.tick();
+  assert.equal(t.sent.filter((x) => x.startsWith('[MANGA=')).length, 1);
+  assert.ok(t.logs.some((l) => /vừa gửi truyện/.test(l.text)));
+});
