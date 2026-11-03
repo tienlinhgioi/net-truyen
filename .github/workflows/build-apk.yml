@@ -33,7 +33,8 @@ jobs:
           NETVIP_KEY_ALIAS: ${{ secrets.NETVIP_KEY_ALIAS }}
           NETVIP_KEY_PASSWORD: ${{ secrets.NETVIP_KEY_PASSWORD }}
       - id: ver
-        run: echo "v=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "v=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/+.*//')" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: net-vip-${{ steps.ver.outputs.v }}
