@@ -22,7 +22,7 @@ export function comboEditor(mgr, { combo, keys, onChange }) {
     for (const [role, label] of ROLES) {
       const list = combo[role] || (combo[role] = []);
       const box = h('div', { class: 'role', 'data-role': role }, h('div', { class: 'row between' }, h('b', { text: label }),
-        h('button', { class: 'link', 'data-add': role, text: '+ Thêm model', onclick: () => openModelPicker(mgr, { keys: keys(), multi: true, selected: list,
+        h('button', { class: 'link', 'data-add': role, text: '+ Thêm model', onclick: () => openModelPicker(mgr, { keys: keys(), multi: true, selected: list, role,
           onDone: (add) => { combo[role] = [...list, ...add]; onChange(); render(); } }) })));
       if (!list.length) box.append(h('div', { class: 'muted', text: role === 'text' ? 'Trống: dùng model đơn ở trên hoặc combo chung.' : 'Trống: tính năng này sẽ tắt.' }));
       list.forEach((m, i) => box.append(h('div', { class: 'keyrow', 'data-model': m },

@@ -1,4 +1,4 @@
-// Ảnh: đọc ảnh Gemini tạo, tải lên imgbb bằng khóa CỦA NGƯỜI DÙNG, sticker, giới hạn số ảnh.
+// Ảnh: đọc ảnh Gemini tạo, sticker, giới hạn số ảnh. (Tải ảnh lên do ChatClient.uploadImage làm.)
 
 export function parseImageResponse(json) {
   const parts = json?.candidates?.[0]?.content?.parts || [];
@@ -6,19 +6,6 @@ export function parseImageResponse(json) {
   if (!img) throw Object.assign(new Error('noimage'), { kind: 'noimage' });
   const text = parts.map((p) => p.text || '').join('').trim();
   return { mime: img.inlineData.mimeType || 'image/png', data: img.inlineData.data, text };
-}
-
-/** Tải ảnh (base64) lên imgbb bằng API key của người dùng, trả về link ảnh. */
-export async function uploadImgbb(http, base64, key) {
-  if (!key) throw Object.assign(new Error('nokey'), { kind: 'imgbbkey' });
-  const res = await http({
-    url: `https://api.imgbb.com/1/upload?key=${encodeURIComponent(key)}`, method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-    data: `image=${encodeURIComponent(base64)}`,
-  });
-  const url = res.data?.data?.url;
-  if (res.status !== 200 || !url) throw Object.assign(new Error('upload'), { kind: 'upload', status: res.status });
-  return url;
 }
 
 /** Chọn ngẫu nhiên một sticker trong các bộ [packIds]. */

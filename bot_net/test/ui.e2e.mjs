@@ -33,7 +33,7 @@ const mockInit = () => {
       if (r.url.endsWith('/ajax/chat/send')) { const m = new URLSearchParams(r.data).get('message'); window.__sent.push(m); return ok({ status: true }); }
       if ((r.headers['x-goog-api-key'] || '').includes('BAD')) return { status: 400, headers: {}, data: { error: { message: 'API key not valid. Please pass a valid API key.' } } };
       if (r.url.includes('models/gemini-pro:')) return { status: 404, headers: {}, data: {} };
-      if (r.url.includes('/v1beta/models?')) return ok({ models: [{ name: 'models/gemini-fast', displayName: 'Gemini Fast', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-pro', displayName: 'Gemini Pro', inputTokenLimit: 2000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }] });
+      if (r.url.includes('/v1beta/models?')) return ok({ models: [{ name: 'models/gemini-fast', displayName: 'Gemini Fast', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-pro', displayName: 'Gemini Pro', inputTokenLimit: 2000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-2.0-flash-image', displayName: 'Flash Image', inputTokenLimit: 32000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }] });
       if (r.url.includes(':generateContent')) return ok({ candidates: [{ content: { parts: [{ text: `Chào bạn ${++gN}, mình là Ly nè` }] } }], usageMetadata: { totalTokenCount: 21 } });
       return { status: 404, headers: {}, data: '' };
     },
@@ -96,6 +96,11 @@ assert.match(await T('#modelDone').innerText(), /Thêm 3 model/);
 await T('#modelDone').click();
 const rows = await p.locator('#comboBox .role[data-role="text"] .keyrow code').allInnerTexts();
 assert.deepEqual(rows, ['gemini-fast', 'gemini-pro', 'gemini-custom']);
+// vai Tạo ảnh chỉ hiện model ảnh
+await p.locator('[data-add="image"]').click();
+await p.waitForSelector('.model');
+assert.deepEqual(await p.locator('.model').evaluateAll((els) => els.map((e) => e.dataset.id)), ['gemini-2.0-flash-image']);
+await p.locator('.sheet .back').last().click();
 // kiểm tra model sống: gemini-pro bị 404 => chết
 await T('#comboCheck').click();
 await p.waitForSelector('.keyrow[data-model="gemini-pro"] .badge.bad');
@@ -150,8 +155,6 @@ await T('#setBlocked').fill('tục\nxấu'); await T('#setBlocked').blur();
 const st = await p.evaluate(() => window.__mgr.settings);
 assert.equal(st.chatDelayMs, 7000); assert.equal(st.maxChars, 90); assert.deepEqual(st.blockedWords, ['tục', 'xấu']);
 
-await T('#setImgbb').fill('MYIMGBBKEY'); await T('#setImgbb').blur();
-assert.equal(await p.evaluate(() => window.__mgr.settings.imgbbKey), 'MYIMGBBKEY');
 await T('#checkAllAcc').click();
 await p.waitForSelector('#allKeys .badge.ok');
 await T('#openReport').click();

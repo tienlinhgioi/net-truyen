@@ -77,7 +77,7 @@ export function openSettings(mgr, applyTheme) {
           sw('Tự mở chủ đề khi phòng chat vắng', 'starterEnabled'), num('Phòng vắng bao lâu thì mở chủ đề', 'starterIdleMs', 'phút', 'setStarterIdle', 60000),
           h('label', { class: 'f' }, 'Từ nhạy cảm: không chen vào, thấy cãi vã thì đứng ngoài (mỗi dòng một từ)', ta('setSensitive', 'sensitiveWords'))),
         h('div', { class: 'sec' }, h('h3', { text: 'Ảnh' }),
-          h('label', { class: 'f' }, 'Khóa API imgbb của bạn (để gửi ảnh bot tạo)', h('input', { type: 'password', id: 'setImgbb', value: st.imgbbKey, placeholder: 'Lấy miễn phí ở imgbb.com, mục API', onchange: (e) => set({ imgbbKey: e.target.value.trim() }) })),
+          h('span', { class: 'hint', text: 'Ảnh bot tạo được tải lên bằng chính tài khoản đang chat, không cần khóa nào.' }),
           num('Giới hạn số ảnh tạo mỗi ngày (mỗi tài khoản)', 'imagePerDay', 'ảnh', 'setImgDay', 1), num('Chờ giữa hai lần tạo ảnh', 'imageCooldownMs', 'giây', 'setImgCd', 1000)),
         h('div', { class: 'sec' }, h('h3', { text: 'Giới hạn và logic' }),
           h('label', { class: 'f' }, 'Giới hạn ký tự trả lời chung (0 = không giới hạn)', h('input', { type: 'number', min: 0, id: 'setMax', value: st.maxChars, onchange: (e) => set({ maxChars: Math.max(0, Number(e.target.value) || 0) }) })),

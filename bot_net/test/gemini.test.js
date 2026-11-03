@@ -88,3 +88,57 @@ test('generate: mode json không cắt ký tự (việc cắt làm sau khi đọ
   const r = await generate({ http, pool, model: 'm', system: '', context: [], question: 'q', mode: 'json', maxChars: 50, sleep: async () => {} });
   assert.equal(r.text, longJson);
 });
+
+test('buildRequest: không gửi systemInstruction rỗng (nhiều model báo lỗi 400)', () => {
+  const r = buildRequest({ model: 'm', key: 'K', system: '', context: [], question: 'q' });
+  assert.equal(r.data.systemInstruction, undefined);
+  assert.equal(buildRequest({ model: 'm', key: 'K', system: 'x', context: [], question: 'q' }).data.systemInstruction.parts[0].text, 'x');
+});
+
+test('buildRequest: tắt "suy nghĩ" để trả lời nhanh, và có thể bỏ khi model không hỗ trợ', () => {
+  assert.equal(buildRequest({ model: 'm', key: 'K', system: '', context: [], question: 'q' }).data.generationConfig.thinkingConfig.thinkingBudget, 0);
+  assert.equal(buildRequest({ model: 'm', key: 'K', system: '', context: [], question: 'q', caps: { thinking: false } }).data.generationConfig.thinkingConfig, undefined);
+  assert.equal(buildRequest({ model: 'm', key: 'K', system: 'S', context: [], question: 'q', json: true, caps: { json: false, system: false } }).data.generationConfig.responseMimeType, undefined);
+  const noSys = buildRequest({ model: 'm', key: 'K', system: 'S', context: [], question: 'q', caps: { system: false } });
+  assert.equal(noSys.data.systemInstruction, undefined);
+  assert.ok(noSys.data.contents[0].parts[0].text.startsWith('S'));
+});
+
+test('generate: model không hỗ trợ JSON/thinking/system thì tự hạ cấp và thử lại ngay, không tính là lỗi key', async () => {
+  const pool = new KeyPool(['A']);
+  const seen = [];
+  const http = async (r) => {
+    const g = r.data.generationConfig, hasSys = !!r.data.systemInstruction;
+    seen.push({ json: !!g.responseMimeType, think: !!g.thinkingConfig, sys: hasSys });
+    if (g.thinkingConfig) return { status: 400, data: { error: { message: 'Budget 0 is invalid. This model only works in thinking mode.' } } };
+    if (g.responseMimeType) return { status: 400, data: { error: { message: 'JSON mode is not enabled for models/gemma' } } };
+    if (hasSys) return { status: 400, data: { error: { message: 'Developer instruction is not enabled for models/gemma' } } };
+    return ok('được rồi');
+  };
+  const r = await generate({ http, pool, model: 'gemma-x', system: 'S', context: [], question: 'q', mode: 'json', sleep: async () => {} });
+  assert.equal(r.text, 'được rồi');
+  assert.deepEqual(seen.at(-1), { json: false, think: false, sys: false });
+  assert.equal(pool.current('gemma-x'), 'A', 'key vẫn dùng được');
+  seen.length = 0;
+  await generate({ http, pool, model: 'gemma-x', system: 'S', context: [], question: 'q', mode: 'json', sleep: async () => {} });
+  assert.equal(seen.length, 1, 'lần sau nhớ khả năng của model, không thử lại từ đầu');
+});
+
+test('generate: key sai thì đổi key ngay, không chờ; chỉ chờ khi hết hạn mức', async () => {
+  const pool = new KeyPool(['A', 'B', 'C']);
+  const sleeps = [];
+  const http = async (r) => {
+    const k = r.headers['x-goog-api-key'];
+    if (k === 'A') return { status: 400, data: { error: { message: 'API key not valid' } } };
+    if (k === 'B') return { status: 429, data: {} };
+    return ok('ok');
+  };
+  await generate({ http, pool, model: 'm2', system: '', context: [], question: 'q', keyDelayMs: 2000, sleep: async (ms) => sleeps.push(ms) });
+  assert.deepEqual(sleeps, [2000], 'chỉ một lần chờ (sau key hết hạn mức), key sai không chờ');
+});
+
+test('generate: lỗi khác có kèm mã HTTP và nội dung Google báo', async () => {
+  const pool = new KeyPool(['A']);
+  const http = async () => ({ status: 400, data: { error: { message: 'Invalid value at contents' } } });
+  await assert.rejects(generate({ http, pool, model: 'm3', system: '', context: [], question: 'q', sleep: async () => {} }), (e) => e.status === 400 && /Invalid value/.test(e.detail));
+});

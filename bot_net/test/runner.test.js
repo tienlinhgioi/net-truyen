@@ -5,13 +5,13 @@ import { defaultAccount, defaultSettings } from '../www/js/core/store.js';
 
 const gem = (text) => ({ status: 200, data: { candidates: [{ content: { parts: [{ text }] } }], usageMetadata: { totalTokenCount: 7 } } });
 
-function setup({ profile = () => '', rand = () => 0.5, stickers = [], chatLists, gemini = () => gem('Chào bạn nhé'), sendResult = () => ({ ok: true }), account = {}, settings = {}, now = () => new Date('2026-11-03T12:00:00') } = {}) {
+function setup({ uploadResult = () => ({ status: 200, headers: {}, data: { status: true, url: 'https://st.netcdn.one/uploads/forum/ve.png' } }), profile = () => '', rand = () => 0.5, stickers = [], chatLists, gemini = () => gem('Chào bạn nhé'), sendResult = () => ({ ok: true }), account = {}, settings = {}, now = () => new Date('2026-11-03T12:00:00') } = {}) {
   const sleeps = [], sent = [], logs = [], saved = [];
   let call = 0, loggedIn = 0;
   const acc = { ...defaultAccount(), id: 'a1', email: 'e', password: 'p', name: 'Tiểu Ly', displayName: 'Tiểu Ly', command: '/ai', keys: ['K1'], model: 'm', ...account };
   const st = { ...defaultSettings(), chatDelayMs: 5000, ...settings };
   const http = async (r) => {
-    if (r.url.includes('api.imgbb.com')) return { status: 200, headers: {}, data: { data: { url: 'https://i.ibb.co/ve.png' } } };
+    if (r.url.endsWith('/ajax/forum/upload-image')) return uploadResult();
     if (r.url.endsWith('/ajax/search')) return { status: 200, headers: {}, data: { list: [{ url: '/manga/one-piece', name: 'One Piece' }] } };
     if (r.url.includes('generativelanguage')) return gemini(r);
     if (r.url.endsWith('/ajax/auth/login')) { loggedIn++; return { status: 200, headers: { 'set-cookie': 'UserID=1' }, data: { status: true } }; }
@@ -173,20 +173,20 @@ test('gửi truyện: tìm theo tên rồi gửi thẻ truyện', async () => {
   assert.deepEqual(t.sent, ['nè bạn', '[MANGA=one-piece]']);
 });
 
-test('tạo ảnh: dùng combo ảnh, tải lên imgbb bằng khóa của người dùng rồi gửi', async () => {
+test('tạo ảnh: dùng combo ảnh, tải lên bằng phiên đăng nhập của tài khoản (không cần khóa nào) rồi gửi', async () => {
   const gemini = (r) => (r.data.generationConfig?.responseModalities ? { status: 200, data: { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'QUJD' } }] } }] } } : json({ reply: 'để mình vẽ', draw: 'một chú mèo' }));
-  const t = setup(mention({ gemini, account: { combo: { text: [], image: ['img-model'], vision: [] } }, settings: { imgbbKey: 'MYKEY' } }));
+  const t = setup(mention({ gemini, account: { combo: { text: [], image: ['img-model'], vision: [] } }, }));
   await twoTicks(t);
-  assert.deepEqual(t.sent, ['để mình vẽ', '[IMG=https://i.ibb.co/ve.png]']);
+  assert.deepEqual(t.sent, ['để mình vẽ', '[IMG=https://st.netcdn.one/uploads/forum/ve.png]']);
   assert.equal(t.bot.account.stats.days[Object.keys(t.bot.account.stats.days)[0]].images, 1);
 });
 
-test('tạo ảnh: chưa có khóa imgbb thì không tạo, chỉ báo trong nhật ký', async () => {
-  const gemini = (r) => (r.data.generationConfig?.responseModalities ? { status: 500, data: {} } : json({ reply: 'để mình vẽ', draw: 'mèo' }));
-  const t = setup(mention({ gemini, account: { combo: { text: [], image: ['img-model'], vision: [] } } }));
+test('tạo ảnh: web từ chối tải ảnh thì chỉ báo lỗi trong nhật ký, tin chữ vẫn gửi', async () => {
+  const gemini = (r) => (r.data.generationConfig?.responseModalities ? { status: 200, data: { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'QUJD' } }] } }] } } : json({ reply: 'để mình vẽ', draw: 'mèo' }));
+  const t = setup(mention({ gemini, uploadResult: () => ({ status: 200, headers: {}, data: { status: false, message: 'Bạn cần đăng nhập' } }), account: { combo: { text: [], image: ['img-model'], vision: [] } } }));
   await twoTicks(t);
   assert.deepEqual(t.sent, ['để mình vẽ']);
-  assert.ok(t.logs.some((l) => /imgbb/i.test(l.text)));
+  assert.ok(t.logs.some((l) => /ảnh/i.test(l.text) && l.level === 'error'));
 });
 
 test('tạo ảnh: giới hạn số ảnh mỗi ngày', async () => {
@@ -194,7 +194,7 @@ test('tạo ảnh: giới hạn số ảnh mỗi ngày', async () => {
   const gemini = (r) => (r.data.generationConfig?.responseModalities ? { status: 200, data: { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'QUJD' } }] } }] } } : (() => { drawN++; return json({ reply: `vẽ nè ${drawN}`, draw: 'mèo' }); })());
   const t = setup({
     chatLists: [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', '/ai vẽ mèo', 'A'), m(3, 'u', '/ai vẽ chó', 'A')]],
-    gemini, account: { combo: { text: [], image: ['img-model'], vision: [] } }, settings: { imgbbKey: 'K', imagePerDay: 1, imageCooldownMs: 0 },
+    gemini, account: { combo: { text: [], image: ['img-model'], vision: [] } }, settings: { imagePerDay: 1, imageCooldownMs: 0 },
   });
   await twoTicks(t);
   assert.equal(t.sent.filter((x) => x.startsWith('[IMG=')).length, 1);

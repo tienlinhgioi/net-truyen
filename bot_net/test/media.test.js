@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseImageResponse, uploadImgbb, pickSticker, ImageQuota } from '../www/js/core/media.js';
+import { parseImageResponse, pickSticker, ImageQuota } from '../www/js/core/media.js';
 
 test('parseImageResponse: lấy ảnh inline từ Gemini', () => {
   const r = parseImageResponse({ candidates: [{ content: { parts: [{ text: 'đây' }, { inlineData: { mimeType: 'image/png', data: 'QUJD' } }] } }] });
@@ -9,25 +9,6 @@ test('parseImageResponse: lấy ảnh inline từ Gemini', () => {
 
 test('parseImageResponse: không có ảnh thì ném lỗi noimage', () => {
   assert.throws(() => parseImageResponse({ candidates: [{ content: { parts: [{ text: 'xin lỗi' }] } }] }), (e) => e.kind === 'noimage');
-});
-
-test('uploadImgbb: gửi base64 và trả về link ảnh', async () => {
-  let sent;
-  const http = async (r) => { sent = r; return { status: 200, headers: {}, data: { data: { url: 'https://i.ibb.co/x.png' }, success: true } }; };
-  const url = await uploadImgbb(http, 'QUJD', 'KEY');
-  assert.equal(url, 'https://i.ibb.co/x.png');
-  assert.match(sent.url, /api\.imgbb\.com\/1\/upload\?key=KEY/);
-  assert.match(sent.data, /image=QUJD/);
-});
-
-test('uploadImgbb: chưa có khóa imgbb của người dùng thì báo thiếu khóa, không gọi mạng', async () => {
-  let called = false;
-  await assert.rejects(uploadImgbb(async () => { called = true; return {}; }, 'x', ''), (e) => e.kind === 'imgbbkey');
-  assert.equal(called, false);
-});
-
-test('uploadImgbb: lỗi thì ném', async () => {
-  await assert.rejects(uploadImgbb(async () => ({ status: 400, headers: {}, data: {} }), 'x', 'K'));
 });
 
 test('pickSticker: chỉ lấy trong các bộ được chọn', () => {

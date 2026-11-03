@@ -66,3 +66,19 @@ test('searchManga: tìm truyện theo tên', async () => {
   assert.match(body, /search=one\+piece/);
   assert.deepEqual(r, [{ slug: 'one-piece', name: 'One Piece' }]);
 });
+
+test('uploadImage: tải ảnh lên bằng phiên đăng nhập của tài khoản, trả về link', async () => {
+  let req;
+  const http = fakeHttp({ 'POST /ajax/forum/upload-image': (r) => { req = r; return { status: 200, headers: {}, data: { status: true, url: 'https://st.netcdn.one/uploads/forum/x.png' } }; } });
+  const c = new ChatClient({ http, base: BASE });
+  c.jar.update(['UserID=5']);
+  assert.equal(await c.uploadImage('QUJD', 'image/png'), 'https://st.netcdn.one/uploads/forum/x.png');
+  assert.equal(req.dataType, 'formData');
+  assert.deepEqual(req.data[0], { type: 'base64File', key: 'image', fileName: 'ai-image.png', contentType: 'image/png', value: 'QUJD' });
+  assert.match(req.headers.Cookie, /UserID=5/);
+});
+
+test('uploadImage: web từ chối thì ném lỗi kèm thông báo', async () => {
+  const http = fakeHttp({ 'POST /ajax/forum/upload-image': { status: 200, headers: {}, data: { status: false, message: 'Bạn cần đăng nhập' } } });
+  await assert.rejects(new ChatClient({ http, base: BASE }).uploadImage('QUJD', 'image/png'), /Bạn cần đăng nhập/);
+});

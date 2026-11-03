@@ -5,22 +5,57 @@ import { parseImageResponse } from './media.js';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-export function buildRequest({ model, key, system, context = [], question, asker, maxOutputTokens = 512, json = false, image = false }) {
+export function buildRequest({ model, key, system, context = [], question, asker, maxOutputTokens = 512, json = false, image = false, caps = {} }) {
   const ctx = context.length ? `Tin nhắn gần đây trong phòng chat:\n${context.map((c) => `${c.name}: ${c.text}`).join('\n')}\n\n` : '';
   const who = asker ? `${asker} hỏi: ` : '';
+  const useSys = !!system && caps.system !== false;
+  const lead = system && !useSys ? `${system}\n\n` : '';
+  const generationConfig = image
+    ? { responseModalities: ['TEXT', 'IMAGE'] }
+    : {
+      maxOutputTokens, temperature: 0.9,
+      ...(json && caps.json !== false ? { responseMimeType: 'application/json' } : {}),
+      ...(caps.thinking !== false ? { thinkingConfig: { thinkingBudget: 0 } } : {}), // trả lời nhanh, không "suy nghĩ" lâu
+    };
   return {
     url: `${BASE}/models/${model}:generateContent`,
     method: 'POST',
+    timeout: 20000,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     data: {
-      systemInstruction: { parts: [{ text: system || '' }] },
-      contents: [{ role: 'user', parts: [{ text: `${ctx}${who}${question}` }] }],
-      generationConfig: image ? { responseModalities: ['TEXT', 'IMAGE'] } : { maxOutputTokens, temperature: 0.9, ...(json ? { responseMimeType: 'application/json' } : {}) },
+      ...(useSys ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      contents: [{ role: 'user', parts: [{ text: `${lead}${ctx}${who}${question}` }] }],
+      generationConfig,
     },
   };
 }
 
 const err = (kind, extra = {}) => Object.assign(new Error(kind), { kind, ...extra });
+
+// Ghi nhớ model nào không hỗ trợ JSON / suy nghĩ tắt / hướng dẫn hệ thống để lần sau khỏi thử lại.
+const CAPS = new Map();
+export const capsOf = (model) => CAPS.get(model) || CAPS.set(model, {}).get(model);
+
+/** Nếu Google báo model không hỗ trợ một tính năng, tắt tính năng đó. Trả về true nếu đã đổi gì. */
+function downgrade(caps, status, data) {
+  if (status !== 400) return false;
+  const msg = String(data?.error?.message || '');
+  if (/api key/i.test(msg)) return false;
+  if (caps.thinking !== false && /thinking|budget/i.test(msg)) { caps.thinking = false; return true; }
+  if (caps.json !== false && /json mode|responsemimetype|mime type/i.test(msg)) { caps.json = false; return true; }
+  if (caps.system !== false && /developer instruction|system instruction|systeminstruction/i.test(msg)) { caps.system = false; return true; }
+  return false;
+}
+
+/** Gọi một model; nếu 400 vì tính năng không hỗ trợ thì hạ cấp và thử lại ngay (tối đa 4 lần). */
+async function callModel(http, opts) {
+  const caps = capsOf(opts.model);
+  for (let i = 0; ; i++) {
+    const res = await http(buildRequest({ ...opts, caps }));
+    if (i < 4 && downgrade(caps, res.status, res.data)) continue;
+    return res;
+  }
+}
 
 export function parseResponse(json) {
   const parts = json?.candidates?.[0]?.content?.parts;
@@ -45,7 +80,7 @@ export async function generate({ http, pool, model, system, context, question, a
   for (;;) {
     const key = pool.current(model);
     if (!key) throw err('nokey', { retryAt: pool.retryAt(model) });
-    const res = await http(buildRequest({ model, key, system, context, question, asker, json: mode === 'json', image: mode === 'image', maxOutputTokens: mode === 'json' ? 1024 : 512 }));
+    const res = await callModel(http, { model, key, system, context, question, asker, json: mode === 'json', image: mode === 'image', maxOutputTokens: mode === 'json' ? 1024 : 512 });
     if (res.status === 200) {
       if (mode === 'image') {
         let image;
@@ -60,7 +95,7 @@ export async function generate({ http, pool, model, system, context, question, a
     const kind = classifyError(res.status, res.data);
     if (kind === 'quota' || kind === 'invalid') {
       pool.fail(key, kind, model);
-      if (pool.current(model)) await sleep(keyDelayMs);
+      if (kind === 'quota' && pool.current(model)) await sleep(keyDelayMs); // key sai thì đổi ngay, không chờ
       continue;
     }
     if (kind === 'server' && serverRetries++ < 2) { await sleep(1500); continue; }
@@ -99,7 +134,7 @@ export async function generateCombo({ models, health, ...rest }) {
 /** Kiểm tra một model còn sống không (gửi một yêu cầu cực nhỏ), kèm độ trễ. */
 export async function checkModel(http, key, model, now = () => Date.now()) {
   const t0 = now();
-  const res = await http(buildRequest({ model, key, system: '', context: [], question: 'ping', maxOutputTokens: 1 }));
+  const res = await callModel(http, { model, key, system: '', context: [], question: 'ping', maxOutputTokens: 8 });
   const ms = now() - t0;
   if (res.status === 200) return { alive: true, state: 'ok', ms };
   const state = classifyError(res.status, res.data);

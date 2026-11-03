@@ -1,5 +1,11 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.3
+- Gửi ảnh không cần khóa nào nữa: ảnh bot tạo được tải lên bằng chính phiên đăng nhập của tài khoản đang chat (đường tải ảnh của web). Bỏ ô khóa imgbb.
+- Sửa nhiều lỗi model và API key: không còn gửi "hướng dẫn hệ thống" rỗng khi kiểm tra; model không hỗ trợ JSON, tắt suy nghĩ hoặc hướng dẫn hệ thống thì tự hạ cấp và thử lại ngay, nhớ khả năng của từng model; thông báo lỗi nêu rõ nguyên nhân kèm mã HTTP.
+- Giảm độ trễ: tắt chế độ "suy nghĩ" của model, key sai thì đổi key ngay không chờ, chờ đổi key mặc định giảm còn 1 giây, giới hạn thời gian chờ mỗi yêu cầu.
+- Chọn model theo vai: chat chữ bỏ model ảnh/giọng nói, tạo ảnh chỉ hiện model ảnh (có nút hiện tất cả).
+
 ## 1.0.2
 - Phản hồi nhanh hơn: hỏi Gemini ngay khi có người gọi, thời gian "gõ" tính chồng lên thời gian chờ; quét chat 1,5 giây (1 giây khi đang trò chuyện); delay chat mặc định là khoảng cách tối thiểu giữa 2 tin.
 - Combo model: mỗi vai (chat chữ, tạo ảnh, hiểu ảnh) có nhiều model theo thứ tự ưu tiên, thêm nhiều model cùng lúc hoặc tự gõ tên; kiểm tra model sống, tự bỏ qua model chết, hết hạn mức model này thì dùng model kế.

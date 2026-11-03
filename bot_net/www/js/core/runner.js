@@ -8,7 +8,7 @@ import { isActive } from './schedule.js';
 import { normalize, limitChars } from './text.js';
 import { comboFor, ModelHealth } from './combo.js';
 import { parseDirective } from './directive.js';
-import { uploadImgbb, pickSticker, ImageQuota } from './media.js';
+import { pickSticker, ImageQuota } from './media.js';
 import { moodFor, typingDelayMs, splitReply, isRepeat } from './persona.js';
 import { ConvoTracker, UserMemory } from './convo.js';
 
@@ -210,7 +210,8 @@ export class AccountBot {
     if (e.kind === 'nokey') { this.log('Hết API key khả dụng, sẽ thử lại sau', 'error'); return urgent ? 'retry' : 'drop'; }
     if (e.kind === 'blocked') { this.log('Gemini từ chối trả lời câu này, bỏ qua', 'warn'); return 'drop'; }
     if (e.kind === 'nomodel') { this.log(`Không model nào dùng được: ${e.detail || ''}`, 'error'); return 'drop'; }
-    this.log(`Lỗi Gemini: ${e.kind || e.message}${e.detail ? ' - ' + e.detail : ''}`, 'error');
+    const why = { invalid: 'API key sai hoặc bị khóa', quota: 'hết hạn mức', model: 'model không tồn tại hoặc không hỗ trợ', server: 'máy chủ Google đang lỗi' }[e.kind] || e.kind || e.message;
+    this.log(`Lỗi Gemini${e.status ? ` (HTTP ${e.status})` : ''}: ${why}${e.detail ? ' - ' + String(e.detail).slice(0, 140) : ''}`, 'error');
     return 'drop';
   }
 
@@ -275,17 +276,16 @@ export class AccountBot {
     const quota = new ImageQuota({ perDay: st.imagePerDay ?? 5, cooldownMs: st.imageCooldownMs ?? 60000, now: this.nowMs });
     const q = quota.check(this.stats);
     if (!q.ok) { this.log(q.reason === 'daily' ? 'Đã đạt giới hạn số ảnh tạo mỗi ngày' : 'Đang chờ giữa hai lần tạo ảnh (giới hạn)', 'warn'); return; }
-    if (!st.imgbbKey) { this.log('Chưa nhập khóa imgbb trong cài đặt nên không gửi được ảnh', 'warn'); return; }
     const models = comboFor(this.account, st, 'image');
     if (!models.length) { this.log('Chưa chọn model tạo ảnh trong combo', 'warn'); return; }
     this.log(`Đang tạo ảnh: ${prompt}`);
     try {
       const out = await generateCombo({ http: this.http, pool: this.pool, health: this.health, models, system: '', context: [], question: prompt, mode: 'image', keyDelayMs: st.keyDelayMs, sleep: this.sleep });
-      const url = await uploadImgbb(this.http, out.image.data, st.imgbbKey);
+      const url = await this.client.uploadImage(out.image.data, out.image.mime);
       quota.record(this.stats);
       await this.#waitToSend(8, this.nowMs(), st);
       if (await this.#send(`[IMG=${url}]`, st)) this.#bump('images');
-    } catch (e) { this.log(`Không tạo/gửi được ảnh: ${e.kind || e.message}`, 'error'); }
+    } catch (e) { this.log(`Không tạo/gửi được ảnh: ${e.kind === 'nomodel' ? 'không có model tạo ảnh dùng được' : (e.message || e.kind)}`, 'error'); }
   }
 
   async start() {

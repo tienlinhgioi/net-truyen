@@ -5,12 +5,13 @@ const plugin = (n) => cap()?.Plugins?.[n];
 export const isNative = () => !!cap()?.isNativePlatform?.();
 
 /** HTTP có kho cookie riêng cho từng tài khoản (CapacitorCookies tắt), không bị CORS. */
-export async function http({ url, method = 'GET', headers = {}, data }) {
+export async function http({ url, method = 'GET', headers = {}, data, dataType, timeout }) {
   const h = plugin('CapacitorHttp');
   if (h) {
     const isForm = /x-www-form-urlencoded/i.test(headers['Content-Type'] || '');
     const body = isForm && typeof data === 'string' ? Object.fromEntries(new URLSearchParams(data)) : data;
-    const r = await h.request({ url, method, headers, data: body, responseType: 'json', connectTimeout: 20000, readTimeout: 30000 });
+    const t = timeout || 20000;
+    const r = await h.request({ url, method, headers, data: body, dataType, responseType: 'json', connectTimeout: t, readTimeout: t });
     return { status: r.status, headers: r.headers || {}, data: r.data };
   }
   const r = await fetch(url, { method, headers, body: typeof data === 'object' ? JSON.stringify(data) : data });

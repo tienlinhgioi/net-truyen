@@ -54,6 +54,21 @@ export class ChatClient {
     return (d.list || []).map((m) => ({ slug: String(m.url || '').split('/manga/')[1] || '', name: m.name })).filter((m) => m.slug);
   }
 
+  /** Tải ảnh (base64) lên máy chủ của web bằng phiên đăng nhập của tài khoản, trả về link ảnh. */
+  async uploadImage(base64, mime = 'image/png') {
+    const ext = (mime.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const headers = { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'multipart/form-data' };
+    const cookie = this.jar.header();
+    if (cookie) headers.Cookie = cookie;
+    const res = await this.http({
+      url: `${this.base}/ajax/forum/upload-image`, method: 'POST', headers, dataType: 'formData',
+      data: [{ type: 'base64File', key: 'image', fileName: `ai-image.${ext}`, contentType: mime, value: base64 }],
+    });
+    const d = json(res.data);
+    if (!d.url) throw new Error(d.message || `Không tải được ảnh lên (HTTP ${res.status})`);
+    return d.url;
+  }
+
   async sendChat(message) {
     const r = await this.#req('POST', '/ajax/chat/send', { message, reply_id: '' });
     const d = json(r.data);
