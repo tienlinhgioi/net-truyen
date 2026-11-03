@@ -51,15 +51,25 @@
   };
 
   var doRead = async function (need) {
-    var m = await pickManga();
-    for (var i = 0; i < need; i++) {
-      status('Đọc chương ' + (i + 1) + '/' + need + '...');
-      var html = await getText('/manga/' + m.slug + '/chapter-' + m.chapters[i]);
+    var m = await pickManga(), counted = 0;
+    for (var i = 0; i < m.chapters.length && counted < need; i++) {
+      status('Đọc chương ' + (counted + 1) + '/' + need + '...');
+      var url = '/manga/' + m.slug + '/chapter-' + m.chapters[i];
+      var html = await getText(url);
       var mid = /MANGA_ID\s*=\s*(\d+)/.exec(html), cid = /CHAPTER_ID\s*=\s*(\d+)/.exec(html);
       if (!mid || !cid) throw new Error('Không đọc được mã chương');
       await sleep(7500); // web chỉ tính lượt đọc sau 7 giây
-      await post('/ajax/manga/view', { manga: mid[1], chapter: cid[1] });
+      // Server chặn ("invalid request") nếu Referer không phải trang chương.
+      var r = await fetch('/ajax/manga/view', {
+        method: 'POST', credentials: 'same-origin', referrer: location.origin + url, referrerPolicy: 'unsafe-url',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+        body: 'manga=' + mid[1] + '&chapter=' + cid[1]
+      });
+      var j = await r.json();
+      if (!j || j.status === false) throw new Error((j && j.message) || 'Không tính được lượt đọc');
+      if (j.counted !== false) counted++; // chương đã đọc trước đó thì đọc tiếp chương khác
     }
+    if (counted < need) throw new Error('Không đủ chương mới để đọc (' + counted + '/' + need + ')');
   };
 
   var doComment = async function (need, s) {

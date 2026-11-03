@@ -1,5 +1,8 @@
 # Net Vip - Lịch sử phiên bản
 
+## 1.0.6
+- Sửa lỗi đọc truyện tự động không được tính nhiệm vụ: web chặn lượt đọc nếu không gửi từ trang chương. Chương đã đọc trước đó được bỏ qua để đọc chương khác.
+
 ## 1.0.5
 - Thêm mục Nhiệm vụ (Linh thạch) trong Cộng đồng, có nút tròn bật/tắt tự làm nhiệm vụ ngày, tuần, tất cả (kèm điểm danh và vòng quay miễn phí).
 - Đổi biểu tượng app theo app NetTruyen.

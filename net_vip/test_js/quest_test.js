@@ -13,6 +13,7 @@ async function scenario(settings, hadSpin) {
   await p.evaluate(s => {
     localStorage.setItem('nvq', JSON.stringify(s));
     window.__NVQ_FAST = 1; window.calls = [];
+    window.fetch = (u, o) => { window.calls.push('POST ' + u + ' ' + o.body + ' ref=' + o.referrer); return Promise.resolve({ json: () => Promise.resolve({ status: true, counted: true }) }); };
     const chapters = Array.from({ length: 12 }, (_, i) => '<a href="/manga/abc/chapter-' + (i + 1) + '">c</a>').join('');
     window.$ = { ajax: o => {
       window.calls.push((o.type || 'GET') + ' ' + o.url + (o.data ? ' ' + JSON.stringify(o.data) : ''));
@@ -46,6 +47,7 @@ const count = (c, re) => c.filter(x => re.test(x)).length;
 (async () => {
   // 1) Chỉ bật "ngày": không đụng nhiệm vụ tuần, không điểm danh/quay
   let c = await scenario({ daily: true, weekly: false, all: false }, 'false');
+  assert.ok(c.filter(x => /manga\/view/.test(x)).every(x => /ref=http:\/\/t\.local\/manga\/abc\/chapter-\d+$/.test(x)), 'lượt đọc phải gửi kèm Referer là trang chương (server chặn nếu sai)');
   assert.strictEqual(count(c, /^POST \/ajax\/manga\/view/), 10, 'đọc 10 chương: ' + count(c, /manga\/view/));
   assert.strictEqual(count(c, /^POST \/ajax\/comment\/add/), 3, '3 bình luận truyện');
   assert.strictEqual(count(c, /new-post|ajax\/forum\/comment/), 0, 'không làm nhiệm vụ tuần');
