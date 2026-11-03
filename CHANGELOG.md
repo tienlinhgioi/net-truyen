@@ -1,0 +1,25 @@
+# Net Vip - Lịch sử phiên bản
+
+## 1.0.5
+- Thêm mục Nhiệm vụ (Linh thạch) trong Cộng đồng, có nút tròn bật/tắt tự làm nhiệm vụ ngày, tuần, tất cả (kèm điểm danh và vòng quay miễn phí).
+- Đổi biểu tượng app theo app NetTruyen.
+
+## 1.0.4
+- Tự phát hành APK tải lẻ lên trang Releases sau mỗi lần build trên main.
+
+## 1.0.3
+- Sửa lỗi sticker trong chat không hiện ảnh (ảnh http bị chặn, đổi sang https).
+
+## 1.0.2
+- Thêm tab Cộng đồng: Diễn đàn, Bảng xếp hạng thành viên.
+- Sửa tab Tài khoản và Theo dõi: khách được chuyển sang trang đăng nhập, đăng nhập xong về đúng trang.
+- Chat: chọn nhiều sticker, gửi cùng chữ khi bấm Enter.
+- Ký bằng khóa cố định để cài đè được giữa các bản.
+
+## 1.0.1
+- Sticker (bộ emoji của web) trong khung chat, ảnh trong chat tự hiện.
+- Đồng bộ đăng nhập giữa các tab, kéo từ đầu trang xuống để làm mới.
+- Sửa tab Theo dõi trỏ đúng trang.
+
+## 1.0.0
+- Bản đầu tiên: xem web NetTruyen trong app với thanh điều hướng dưới (Trang chủ, Theo dõi, Lịch sử, Chat, Tài khoản), ẩn quảng cáo, màn hình lỗi, nút Back.

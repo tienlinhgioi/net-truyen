@@ -43,13 +43,25 @@ jobs:
           path: net_vip/build/app/outputs/flutter-apk/*.apk
       - name: Phát hành bản tải lẻ (chỉ nhánh main)
         if: github.ref == 'refs/heads/main'
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.ver.outputs.v }}
         run: |
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk net-vip.apk
+          notes() { awk -v v="$1" '$0=="## "v{f=1;next} /^## /{f=0} f' CHANGELOG.md; }
+          # Bổ sung bài đăng cho các phiên bản cũ chưa có (không kèm file APK)
+          for v in $(grep '^## ' CHANGELOG.md | sed 's/## //'); do
+            if [ "$v" != "$VER" ] && ! gh release view "v$v" >/dev/null 2>&1; then
+              notes "$v" > "$RUNNER_TEMP/n.md"
+              echo "(Bản cũ, không còn file APK. Dùng bản mới nhất ở trang Releases.)" >> "$RUNNER_TEMP/n.md"
+              gh release create "v$v" --title "Net Vip $v" --notes-file "$RUNNER_TEMP/n.md" --latest=false
+            fi
+          done
+          notes "$VER" > "$RUNNER_TEMP/notes.md"
+          cp net_vip/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk net-vip.apk
           if gh release view "v$VER" >/dev/null 2>&1; then
             gh release upload "v$VER" net-vip.apk --clobber
+            gh release edit "v$VER" --notes-file "$RUNNER_TEMP/notes.md" --latest
           else
-            gh release create "v$VER" net-vip.apk --title "Net Vip $VER" --notes "Net Vip $VER (arm64)" --latest
+            gh release create "v$VER" net-vip.apk --title "Net Vip $VER" --notes-file "$RUNNER_TEMP/notes.md" --latest
           fi

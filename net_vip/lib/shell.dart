@@ -26,9 +26,14 @@ const kTabs = <(String, IconData, String, bool)>[
 const kCommunity = <(String, IconData, String)>[
   ('Diễn đàn', Icons.forum_rounded, '/forum'),
   ('Bảng xếp hạng thành viên', Icons.leaderboard_rounded, '/bang-xep-hang-thanh-vien'),
+  ('Nhiệm vụ (Linh thạch)', Icons.bolt_rounded, kQuestPath),
 ];
 
+const String kQuestPath = '/user/profile?tab=linh-thach';
 const int kCommunityIndex = 5;
+
+/// Tab ẩn (không có trên thanh dưới), tải sẵn khi mở app để tự làm nhiệm vụ.
+const int kQuestIndex = 6;
 
 class _NetVipShellState extends State<NetVipShell> {
   int _i = 0;
@@ -49,6 +54,10 @@ class _NetVipShellState extends State<NetVipShell> {
                 sync: sync,
                 needsAuth: kTabs[n].$4,
               ),
+      widget.buildTab != null
+          ? widget.buildTab!('$kBaseUrl$kQuestPath')
+          : WebTab(
+              initialUrl: '$kBaseUrl$kQuestPath', sync: sync, needsAuth: true),
     ];
   }
 
@@ -67,6 +76,10 @@ class _NetVipShellState extends State<NetVipShell> {
       ),
     );
     if (picked == null || !mounted) return;
+    if (picked == kQuestPath) {
+      setState(() => _i = kQuestIndex);
+      return;
+    }
     setState(() => _i = kCommunityIndex);
     _communityKey.currentState?.load('$kBaseUrl$picked');
   }
@@ -76,7 +89,7 @@ class _NetVipShellState extends State<NetVipShell> {
     return Scaffold(
       body: SafeArea(child: IndexedStack(index: _i, children: _tabs)),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _i,
+        selectedIndex: _i >= kTabs.length ? kCommunityIndex : _i,
         onDestinationSelected: (v) =>
             v == kCommunityIndex ? _openCommunityMenu() : setState(() => _i = v),
         destinations: [

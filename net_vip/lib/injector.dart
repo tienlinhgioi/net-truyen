@@ -23,5 +23,9 @@ $js
     css.add('chat.css');
     js.add('chat.js');
   }
+  if (uri.path == '/user/profile' && uri.queryParameters['tab'] == 'linh-thach') {
+    css.add('quest.css');
+    js.add('quest.js');
+  }
   return (css: css, js: js);
 }

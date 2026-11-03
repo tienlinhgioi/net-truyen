@@ -35,7 +35,7 @@ void main() {
     await t.pump();
     await t.tap(find.text('Trang chủ'));
     await t.pump();
-    expect(created, 6);
+    expect(created, 7); // 6 tab + 1 tab nhiệm vụ ẩn
   });
 
   test('url policy', () {
@@ -98,5 +98,14 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Diễn đàn'), findsOneWidget);
     expect(find.text('Bảng xếp hạng thành viên'), findsOneWidget);
+    expect(find.text('Nhiệm vụ (Linh thạch)'), findsOneWidget);
+  });
+
+  test('assetsForUrl: trang linh thạch có quest.js, hồ sơ thường thì không', () {
+    expect(
+        assetsForUrl(Uri.parse('https://nettruyen15s.com/user/profile?tab=linh-thach')).js,
+        contains('quest.js'));
+    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/user/profile')).js,
+        isNot(contains('quest.js')));
   });
 }
