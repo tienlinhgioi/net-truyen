@@ -1,5 +1,12 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.8
+- Sửa lỗi tự đối đáp một mình: bot nhận ra tin của chính nó chắc chắn hơn. Khớp tin vừa gửi theo dạng đã chuẩn hóa (web có thể đổi chữ khi hiển thị lại như & thành &amp;), dùng nhiều tên (tên hồ sơ, tên trong chat, tên trong cookie đăng nhập), và không bao giờ trả lời một tin trùng chữ với tin mình vừa gửi, kể cả khi chưa biết user_id.
+- Câu trả lời không còn tự gọi tên mình: thay tên và biệt danh của chính mình bằng "mình", bỏ lệnh gọi, bỏ tiền tố "Tên:" và bỏ phần model tự viết lời người khác. Lịch sử chat gửi cho model ghi rõ dòng nào là của chính bot ("Bạn (tên)") và dặn không giả lời người khác.
+- Hai bot không còn đối đáp nhau mãi: mỗi bot khác chỉ được trả lời một lần mỗi 2 phút (chỉnh được), ngoài giới hạn tối đa 2 tin liên tiếp.
+- Sửa lỗi tắt tài khoản mà bot vẫn hoạt động: khi tắt, lượt đang xử lý dở (đang chờ gõ, đang hỏi Gemini, các tin xếp hàng) cũng dừng hẳn và không gửi thêm tin nào.
+- Công tắc "Chạy ngầm": khi tắt, bot dừng hẳn lúc app ra nền và chạy lại khi quay về (không đổi trạng thái bật/tắt từng tài khoản).
+
 ## 1.0.7
 - Phân biệt gói của từng key: nhãn "Gói miễn phí / Gói trả phí / Gói chưa rõ" cạnh mỗi key. Nhận biết theo tên hạn mức Google báo (đuôi FreeTier = miễn phí) và thử một model Pro khi kiểm tra key (Google không có API cho biết gói thanh toán trực tiếp). Giới hạn lượt học được tách riêng theo gói.
 - Đếm hạn mức đúng giờ của Google: ngày hạn mức tính theo nửa đêm giờ Thái Bình Dương (khoảng 14 đến 15 giờ chiều giờ Việt Nam) chứ không theo nửa đêm giờ máy, nên phần trăm không còn lệch. Khi Google báo hết hạn mức theo ngày, số lượt hôm nay được đồng bộ bằng giới hạn (100%) và hiện giờ hạn mức làm mới.

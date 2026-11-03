@@ -5,9 +5,9 @@ import { parseImageResponse } from './media.js';
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-export function buildRequest({ model, key, system, context = [], question, asker, maxOutputTokens = 512, json = false, image = false, caps = {} }) {
+export function buildRequest({ model, key, system, context = [], question, asker, askVerb = 'hỏi', maxOutputTokens = 512, json = false, image = false, caps = {} }) {
   const ctx = context.length ? `Tin nhắn gần đây trong phòng chat:\n${context.map((c) => `${c.name}: ${c.text}`).join('\n')}\n\n` : '';
-  const who = asker ? `${asker} hỏi: ` : '';
+  const who = asker ? `${asker} ${askVerb}: ` : '';
   const useSys = !!system && caps.system !== false;
   const lead = system && !useSys ? `${system}\n\n` : '';
   const generationConfig = image
@@ -121,12 +121,12 @@ export function classifyError(status, data) {
 }
 
 /** Sinh câu trả lời; tự đổi sang key dự phòng khi key hiện tại hết hạn mức hoặc sai. */
-export async function generate({ http, pool, model, system, context, question, asker, mode = 'text', onLimit, onPlan, maxChars = 0, keyDelayMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function generate({ http, pool, model, system, context, question, asker, askVerb, mode = 'text', onLimit, onPlan, maxChars = 0, keyDelayMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   let serverRetries = 0, lastWhy = '';
   for (;;) {
     const key = pool.current(model);
     if (!key) throw err('nokey', { retryAt: pool.retryAt(model), why: lastWhy });
-    const res = await callModel(http, { model, key, system, context, question, asker, json: mode === 'json', image: mode === 'image', maxOutputTokens: mode === 'json' ? 1024 : 512 });
+    const res = await callModel(http, { model, key, system, context, question, asker, askVerb, json: mode === 'json', image: mode === 'image', maxOutputTokens: mode === 'json' ? 1024 : 512 });
     if (res.status === 200) {
       if (mode === 'image') {
         let image;

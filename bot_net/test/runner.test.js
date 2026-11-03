@@ -291,3 +291,27 @@ test('hết key vì model không có hạn mức: nhật ký nêu đúng lý do'
   await t.bot.tick(); await t.bot.tick();
   assert.ok(t.logs.some((l) => /không có hạn mức miễn phí/.test(l.text)), JSON.stringify(t.logs.map((l) => l.text)));
 });
+
+test('TẮT tài khoản: lượt đang xử lý dở không được gửi thêm tin nào sau khi stop()', async () => {
+  const gate = {};
+  const t = setup(mention({ gemini: () => json({ reply: 'đoạn một\n\nđoạn hai', sticker: false }) }));
+  // thay sleep bằng sleep có thể giữ lại để dừng đúng lúc đang "gõ"
+  t.bot.sleep = (ms) => new Promise((res) => { gate.release = res; gate.ms = ms; gate.hit = true; });
+  await t.bot.tick(); // tick 1: chỉ ghi mốc (không ngủ)
+  const run = t.bot.tick();
+  while (!gate.hit) await new Promise((r) => setImmediate(r));
+  t.bot.stop();
+  gate.release();
+  await run;
+  assert.deepEqual(t.sent, [], 'đã tắt thì không gửi gì nữa: ' + JSON.stringify(t.sent));
+  assert.deepEqual(t.bot.pending, []);
+});
+
+test('TẮT tài khoản: tin xếp hàng chưa gửi bị hủy, tick sau khi tắt không đọc chat', async () => {
+  const t = setup({ chatLists: [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', '/ai một', 'A'), m(3, 'u', '/ai hai', 'B')]], gemini: (() => { let n = 0; return () => gem(`câu ${++n}`); })() });
+  await t.bot.tick();
+  t.bot.stop();
+  await t.bot.tick();
+  assert.deepEqual(t.sent, []);
+  assert.equal(t.logs.some((l) => /Đã trả lời/.test(l.text)), false);
+});

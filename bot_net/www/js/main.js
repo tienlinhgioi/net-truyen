@@ -67,4 +67,4 @@ applyTheme(); renderStage(); mgr.logs.forEach(addLog);
 
 // Lưu ngay khi app bị ẩn/đóng để không mất thay đổi.
 addEventListener('pagehide', () => mgr.saveNow());
-document.addEventListener('visibilitychange', () => { if (document.hidden) mgr.saveNow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) mgr.saveNow(); mgr.setForeground(!document.hidden); });

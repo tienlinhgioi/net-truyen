@@ -5,7 +5,7 @@ import { KeyPool } from './keys.js';
 import { generateCombo } from './gemini.js';
 import { decideReplies } from './decide.js';
 import { isActive } from './schedule.js';
-import { normalize, limitChars } from './text.js';
+import { normalize, limitChars, squashMsg, replaceSelf, cleanReply } from './text.js';
 import { comboFor, ModelHealth, orderByBudget } from './combo.js';
 import { parseDirective } from './directive.js';
 import { pickSticker, ImageQuota } from './media.js';
@@ -34,6 +34,7 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
     account.prompt || '',
     `Bạn đang chat trong phòng chat công khai về truyện tranh NetTruyen với tên "${who}".`,
     'Nhắn tin như một thành viên bình thường: tiếng Việt tự nhiên, ngắn gọn, một đoạn, không dùng markdown, không giải thích về cách bạn hoạt động.',
+    `Trong lịch sử chat, dòng "Bạn (${who})" là lời CHÍNH BẠN đã nói; các tên khác là người khác. Chỉ viết lời của bạn, không viết thay hay giả lời người khác, không thêm tên ở đầu câu, không tự gọi tên mình, không tự trả lời lời của chính mình.`,
     max ? `Mỗi câu trả lời tối đa ${max} ký tự.` : '',
     mood,
     notes.length ? `Điều bạn đã biết về người đang nói chuyện: ${notes.join('; ')}.` : '',
@@ -53,6 +54,7 @@ export class AccountBot {
     this.health = new ModelHealth({ now: this.nowMs });
     this.convo = new ConvoTracker({ now: this.nowMs });
     this.lastId = null; this.pending = []; this.lastSentTexts = []; this.mult = 1; this.running = false;
+    this.stopped = false; this.sentNorms = new Set(); this.botReplyAt = new Map();
     this.lastSendAt = 0; this.lastProfileAt = 0; this.lastStarterAt = 0; this.recent = []; this.proTimes = [];
     this.stats = account.stats || (account.stats = { sent: 0, errors: 0, lastAt: 0, days: {} });
     this.stats.days ??= {};
@@ -96,12 +98,19 @@ export class AccountBot {
     } catch { return false; }
   }
 
+  /** Các tên có thể là tên của mình trong chat: tên hồ sơ, tên đã học, tên trong cookie đăng nhập. */
+  ownNames() {
+    let ck = '';
+    try { ck = decodeURIComponent(this.client.jar.map.get('UserName') || ''); } catch { /* bỏ qua */ }
+    return [this.account.displayName, this.account.name, ck].filter(Boolean);
+  }
+
   #learn(list) {
     const a = this.account;
-    if (!a.chatUserId && this.lastSentTexts.length) {
-      const me = normalize(a.displayName || a.name);
-      const hit = list.find((m) => normalize(m.name) === me && this.lastSentTexts.includes(String(m.message).trim()));
-      if (hit) { a.chatUserId = hit.user_id; this.bots.add(a); this.persist(); }
+    if (!a.chatUserId && this.sentNorms.size) {
+      // So khớp theo dạng đã chuẩn hóa vì web có thể đổi chữ khi hiển thị lại (vd & thành &amp;)
+      const hit = list.find((m) => this.sentNorms.has(squashMsg(m.message)));
+      if (hit) { a.chatUserId = hit.user_id; if (hit.name) a.displayName = hit.name; this.bots.add(a); this.persist(); }
     }
     if (a.chatUserId) {
       const mine = [...list].reverse().find((m) => m.user_id === a.chatUserId);
@@ -121,6 +130,7 @@ export class AccountBot {
   }
 
   async tick() {
+    if (this.stopped) return;
     const st = this.getSettings();
     if (!isActive(this.now(), st.schedule)) return;
     if (!this.client.jar.header()) {
@@ -134,18 +144,21 @@ export class AccountBot {
       return;
     }
     if (this.nowMs() - this.lastProfileAt > (st.profileRefreshMs ?? 1800000) && this.lastProfileAt) await this.refreshProfile();
+    if (this.stopped) return;
     this.#learn(list);
     this.convo.setWindow(st.convoWindowMs ?? 180000);
     const allow = this.account.proactive !== false;
     const r = decideReplies({
       messages: list, account: this.account, lastId: this.lastId, bots: this.bots, maxChain: st.maxChain, contextSize: st.contextSize,
-      isActive: (uid) => this.convo.isActive(uid),
+      isActive: (uid) => this.convo.isActive(uid), ownNames: this.ownNames(), sentTexts: this.sentNorms,
       proactive: { chance: allow ? (st.proactiveChance ?? 0) : 0, rand: this.rand, ok: this.#proOk(st), words: st.sensitiveWords || [] },
     });
     this.lastId = r.lastId;
     const blocked = (st.blockedWords || []).map(normalize).filter(Boolean);
     for (const t of r.tasks) {
       if (blocked.some((w) => normalize(t.question).includes(w))) { this.log(`Bỏ qua câu có từ cấm (từ ${t.from})`, 'warn'); continue; }
+      // Hai bot đối đáp nhau: mỗi bot khác chỉ được trả lời một lần mỗi vài phút (mặc định 2 phút)
+      if (t.fromBot && this.nowMs() - (this.botReplyAt.get(t.userId || t.from) || 0) < (st.botToBotCooldownMs ?? 120000)) { this.log(`Bỏ qua tin của bot ${t.from} (vừa trả lời gần đây)`, 'warn'); continue; }
       if (!this.pending.some((p) => p.id === t.id)) this.pending.push(t);
     }
     this.#maybeStarter(st, list);
@@ -168,6 +181,9 @@ export class AccountBot {
 
   async #send(text, st) {
     for (let attempt = 0; attempt < 3; attempt++) {
+      if (this.stopped) return false; // đã tắt tài khoản: không gửi thêm gì
+      this.sentNorms.add(squashMsg(text)); // ghi nhớ trước khi gửi để tin web hiển thị lại luôn bị nhận ra là của mình
+      if (this.sentNorms.size > 200) this.sentNorms.delete(this.sentNorms.values().next().value);
       const r = await this.client.sendChat(text);
       if (r.ok) {
         this.lastSendAt = this.nowMs(); this.lastSentTexts = [...this.lastSentTexts, text].slice(-8);
@@ -193,8 +209,9 @@ export class AccountBot {
     if (wait > 0) await this.sleep(wait);
   }
 
+
   async #drain(st) {
-    while (this.pending.length) {
+    while (this.pending.length && !this.stopped) {
       const task = this.pending[0];
       let result;
       try { result = await this.#handle(task, st); } catch (e) { result = this.#onError(e, task); }
@@ -234,22 +251,25 @@ export class AccountBot {
     const hint = task.kind === 'proactive' ? '\n(Bạn tự chen vào câu chuyện, không phải ai gọi bạn: bình luận ngắn như một người bạn, đừng giới thiệu bản thân.)' : '';
     const ask = (extra = '') => generateCombo({
       http: this.http, pool: this.pool, health: this.health, models, system, context, question: task.question + hint + extra,
-      asker: task.from, mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, onPlan: this.onPlan, hedgeMs: urgentTask ? (st.hedgeMs ?? 0) : 0,
+      asker: task.from, askVerb: task.kind === 'mention' ? 'hỏi' : 'nói', mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, onPlan: this.onPlan, hedgeMs: urgentTask ? (st.hedgeMs ?? 0) : 0,
     });
     let d = parseDirective((await ask()).text);
+    if (this.stopped) return 'drop';
     if (st.avoidRepeat !== false && d.reply && isRepeat(d.reply, this.recent)) {
       this.log('Câu trả lời trùng câu vừa gửi, hỏi lại để có câu khác');
       d = parseDirective((await ask(`\n(Đừng lặp lại các câu bạn vừa nói: ${this.recent.slice(-3).join(' | ')})`)).text);
       if (isRepeat(d.reply, this.recent)) { this.log('Vẫn trùng câu cũ, bỏ qua', 'warn'); return 'drop'; }
     }
-    const reply = limitChars(d.reply, a.maxChars || st.maxChars);
+    const names = [task.from, ...(task.context || []).map((c) => c.name)].filter(Boolean);
+    // Bỏ "Tên:" ở đầu, bỏ phần model tự viết lời người khác, và thay tên/biệt danh của chính mình bằng "mình" để không tự gọi lại chính nó
+    const reply = limitChars(replaceSelf(cleanReply(d.reply, { account: a, names }), a), a.maxChars || st.maxChars);
     if (!reply && !d.sticker && !d.draw && !d.manga) { this.log('Gemini không trả nội dung, bỏ qua', 'warn'); return 'drop'; }
 
     const parts = reply ? splitReply(reply) : [];
     let first = true;
     for (const part of parts) {
       await this.#waitToSend(part.length, first ? t0 : this.nowMs(), st);
-      if (!(await this.#send(part, st))) return 'drop';
+      if (this.stopped || !(await this.#send(part, st))) return 'drop';
       first = false;
     }
     if (parts.length) this.log(`Đã trả lời ${task.from || 'phòng chat'}: ${parts.join(' / ')}`);
@@ -261,6 +281,7 @@ export class AccountBot {
     if (d.draw) await this.#sendImage(d.draw, st);
     if (d.remember && task.userId) this.memory.add(task.userId, task.from, d.remember);
     if (task.userId) this.convo.touch(task.userId, task.from, task.question, reply);
+    if (task.fromBot) this.botReplyAt.set(task.userId || task.from, this.nowMs());
     return 'sent';
   }
 
@@ -296,6 +317,7 @@ export class AccountBot {
   }
 
   async start() {
+    this.stopped = false;
     this.running = true;
     while (this.running) {
       try { await this.tick(); } catch (e) { this.log(`Lỗi: ${e.message}`, 'error'); }
@@ -305,5 +327,6 @@ export class AccountBot {
     }
   }
 
-  stop() { this.running = false; }
+  /** Tắt hẳn: vòng lặp dừng, hàng đợi bị hủy, lượt đang xử lý dở cũng không gửi thêm tin nào. */
+  stop() { this.running = false; this.stopped = true; this.pending = []; }
 }

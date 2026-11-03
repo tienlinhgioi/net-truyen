@@ -14,7 +14,7 @@ export class Manager {
   constructor({ adapter, http, service = null, sleep, loadStickers = null }) {
     this.store = new Store(adapter);
     this.http = http; this.service = service; this.sleep = sleep; this.loadStickers = loadStickers;
-    this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.limits = new LimitBook(); this.plans = {}; this.svcKey = null; this.paused = [];
+    this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.limits = new LimitBook(); this.plans = {}; this.svcKey = null; this.paused = []; this.suspended = [];
     this.bots = new Map();
     this.botSet = new BotSet();
     this.logs = [];
@@ -193,6 +193,22 @@ export class Manager {
   }
 
   clearLogs() { this.logs.length = 0; this.emit('log', null); }
+
+  /**
+   * App ra nền / quay lại. Nếu "Chạy ngầm" tắt thì bot dừng hẳn khi app ra nền (không đổi trạng thái bật/tắt
+   * của từng tài khoản) và chạy lại khi quay về.
+   */
+  setForeground(fg) {
+    if (!fg && !this.store.settings.runInBackground) {
+      this.suspended = this.accounts.filter((a) => this.bots.has(a.id)).map((a) => a.id);
+      for (const id of this.suspended) this.#kill(id);
+      this.emit('accounts');
+    } else if (fg && this.suspended?.length) {
+      for (const id of this.suspended) { const a = this.account(id); if (a?.enabled) this.#spawn(a); }
+      this.suspended = [];
+      this.emit('accounts');
+    }
+  }
 
   /** Dừng khẩn cấp: tắt mọi tài khoản đang chạy (nhớ lại để bật lại một chạm). */
   pauseAll() {

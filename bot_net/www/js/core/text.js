@@ -80,3 +80,49 @@ export function limitChars(text, max) {
   if (sp > max * 0.4) cut = cut.slice(0, sp);
   return cut.replace(/[\s,;:.]+$/, '') + '…';
 }
+
+const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
+
+/** Dạng so khớp của một tin: giải mã &amp; &lt;..., bỏ dấu, bỏ dấu câu, gộp khoảng trắng. Để nhận ra tin web hiển thị lại của chính mình. */
+export function squashMsg(s) {
+  const t = String(s ?? '').replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, (e) => ENT[e]);
+  return normalize(t).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const ownPhrases = (acc) => [acc.name, acc.displayName, ...(acc.aliases || [])].map(normalize).filter(Boolean);
+
+/** Thay tên/biệt danh của chính mình trong câu trả lời bằng "mình" và bỏ lệnh gọi, để bot không tự gọi lại chính nó. */
+export function replaceSelf(text, acc, repl = 'mình') {
+  const orig = String(text ?? '').normalize('NFC');
+  const norm = orig.split('').map(charNorm).join('');
+  if (norm.length !== orig.length) return orig;
+  const cuts = [];
+  const cmd = normalize(acc.command || '');
+  const list = [...new Set(ownPhrases(acc))].filter((p) => p.length >= 2);
+  for (const [p, r] of [...(cmd ? [[cmd, '']] : []), ...list.map((x) => [x, repl])]) {
+    const re = wordRe(p);
+    let m;
+    while ((m = re.exec(norm))) {
+      cuts.push([m.index + m[1].length, m.index + m[0].length, r]);
+      if (m[0].length === 0) re.lastIndex++;
+    }
+  }
+  cuts.sort((a, b) => b[0] - a[0]);
+  let out = orig, lastStart = Infinity;
+  for (const [s, e, r] of cuts) { if (e > lastStart) continue; out = out.slice(0, s) + r + out.slice(e); lastStart = s; }
+  return out.replace(/[ \t]+/g, ' ').replace(/ +([,.!?])/g, '$1').trim();
+}
+
+/** Làm sạch câu trả lời: bỏ tiền tố "Tên:" ở đầu và bỏ phần model tự viết thêm lời người khác (kịch bản hai bên). */
+export function cleanReply(text, { account, names = [] }) {
+  const speakers = [...new Set([...ownPhrases(account), ...names.map(normalize)].filter(Boolean))];
+  const label = (line) => { const m = /^\s*(?:bạn\s*\()?([^:：\n]{1,40}?)\)?\s*[:：]/i.exec(line); return m && speakers.includes(normalize(m[1])) ? m[0] : null; };
+  const lines = String(text ?? '').split('\n');
+  const keep = [];
+  for (let i = 0; i < lines.length; i++) {
+    const lab = label(lines[i]);
+    if (lab && i > 0) break; // dòng sau mở đầu bằng "Tên:" là model tự viết lời người khác
+    keep.push(lab ? lines[i].slice(lab.length).trim() : lines[i]);
+  }
+  return keep.join('\n').trim();
+}

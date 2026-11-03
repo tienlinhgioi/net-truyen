@@ -234,6 +234,25 @@ assert.match(await p.locator('.scan-row[data-model="gemini-2.0-flash-image"] .ba
 assert.match(await p.locator('#scanSummary').innerText(), /Sống: 2/);
 assert.equal(await T('#getKey').getAttribute('href'), 'https://aistudio.google.com/apikey');
 
+// 13) Tắt tài khoản là dừng thật; "Chạy ngầm" tắt thì app ra nền bot dừng, quay lại thì chạy lại
+const accId = await p.evaluate(() => window.__mgr.accounts[0].id);
+await p.evaluate((id) => window.__mgr.setEnabled(id, true), accId);
+assert.equal(await p.evaluate(() => window.__mgr.runningAccounts().length), 1);
+const hide = (hidden) => p.evaluate((h) => { Object.defineProperty(document, 'hidden', { get: () => h, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); }, hidden);
+await hide(true);
+assert.equal(await p.evaluate(() => window.__mgr.runningAccounts().length), 1, 'bật chạy ngầm: ra nền vẫn chạy');
+await p.evaluate(() => window.__mgr.updateSettings({ runInBackground: false }));
+await hide(true);
+assert.equal(await p.evaluate(() => window.__mgr.runningAccounts().length), 0, 'tắt chạy ngầm: ra nền thì dừng');
+assert.equal(await p.evaluate(() => window.__mgr.accounts[0].enabled), true, 'không đổi trạng thái bật/tắt của tài khoản');
+await hide(false);
+assert.equal(await p.evaluate(() => window.__mgr.runningAccounts().length), 1, 'quay lại app thì chạy lại');
+await p.evaluate((id) => window.__mgr.setEnabled(id, false), accId);
+const before = await p.evaluate(() => window.__sent.length);
+await p.evaluate(() => window.__chat.push({ id: 900, user_id: 'u9', name: 'Ai đó', message: '/ly còn chạy không', manga: null }));
+await p.waitForTimeout(600);
+assert.equal(await p.evaluate(() => window.__sent.length), before, 'đã tắt tài khoản thì không trả lời nữa');
+
 assert.deepEqual(errs, [], 'không có lỗi JS: ' + errs.join('|'));
 console.log('ui e2e: PASS');
 await b.close(); srv.close();
