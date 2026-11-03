@@ -147,6 +147,38 @@
 - [ ] **Step 3:** Cài thử trên máy: đọc truyện, đăng nhập, chat, nhiệm vụ.
 - [ ] **Step 4:** Commit.
 
+### Task 9: Bản 1.0.1 - Đồng bộ đăng nhập, kéo làm mới, sửa tab Theo dõi
+
+**Files:**
+- Create: `net_vip/lib/auth_sync.dart`, `net_vip/assets/inject/base.js` (thay nội dung)
+- Modify: `net_vip/lib/web_tab.dart`, `net_vip/lib/shell.dart`, `net_vip/pubspec.yaml` (version `1.0.1+2`)
+- Test: `net_vip/test/app_test.dart`
+
+**Interfaces:**
+- Produces: `class AuthSync extends ChangeNotifier { String? state; void report(String s); }` (chỉ notify khi đổi); `WebTab({required String initialUrl, required AuthSync sync})`; JavaScriptChannel `NetVip` nhận `auth:<UserID|out>` và `refresh`.
+
+- [ ] **Step 1:** Test `AuthSync chỉ báo khi đổi`: report('out'), report('out'), report('123') cho đúng 2 lần notify.
+- [ ] **Step 2:** Chạy `flutter test`, expect FAIL (chưa có `AuthSync`).
+- [ ] **Step 3:** Cài `AuthSync`; `WebTab` đăng ký channel, khi `auth:` đổi so với trạng thái tab đã tải thì `reload()`; `refresh` thì `reload()`. `base.js` đọc cookie `UserID` (không HttpOnly, đã xác minh) và gửi `auth:`; kéo xuống từ đầu trang quá 150px gửi `refresh`. Tab Theo dõi trỏ `/user/bookmarks` (đã xác minh trên web khi đăng nhập). Bỏ `RefreshIndicator` (không kích hoạt được trên WebView).
+- [ ] **Step 4:** `flutter test` và `flutter analyze` sạch.
+- [ ] **Step 5:** Commit.
+
+### Task 10: Nút sticker trong chat
+
+**Files:**
+- Create: `net_vip/assets/inject/chat.js`, `chat.css`, `stickers.json` (13 bộ, URL lấy từ plugin tinymce của web, bỏ URL trùng giữa các bộ)
+- Modify: `net_vip/lib/injector.dart` (`assetsForUrl`), `net_vip/lib/web_tab.dart` (chèn theo trang)
+- Test: `net_vip/test/app_test.dart`
+
+**Interfaces:**
+- Produces: `({List<String> css, List<String> js}) assetsForUrl(Uri uri)`: `/chat` thêm `chat.css`, `chat.js`; trang khác chỉ `base.*`.
+
+- [ ] **Step 1:** Test: `assetsForUrl('/chat').js` chứa `chat.js`; `assetsForUrl('/').js == ['base.js']`.
+- [ ] **Step 2:** Chạy, expect FAIL.
+- [ ] **Step 3:** Cài hàm; `chat.js` thêm nút `#btnEmoji` cạnh `#txtMessage`, bảng sticker có tab theo bộ; bấm sticker gửi `POST /ajax/chat/send {message:"[IMG=url]", reply_id:null}` (đúng như web gửi ảnh); tự bấm các nút "Xem ảnh" để ảnh hiện sẵn.
+- [ ] **Step 4:** Test PASS, `flutter analyze` sạch.
+- [ ] **Step 5:** Commit, push `main`, kiểm tra CI xanh.
+
 ---
 
 ## Self-Review

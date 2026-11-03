@@ -4,6 +4,7 @@ import 'package:net_vip/main.dart';
 import 'package:net_vip/shell.dart';
 import 'package:net_vip/url_policy.dart';
 import 'package:net_vip/injector.dart';
+import 'package:net_vip/auth_sync.dart';
 import 'package:net_vip/widgets/error_view.dart';
 
 void main() {
@@ -51,5 +52,22 @@ void main() {
     expect(s, contains('netvip-css'));
     expect(s, contains('try'));
     expect(s, contains('catch'));
+  });
+
+  test('AuthSync chỉ báo khi đổi', () {
+    final s = AuthSync();
+    var n = 0;
+    s.addListener(() => n++);
+    s.report('out');
+    s.report('out');
+    s.report('123');
+    expect(n, 2);
+  });
+
+  test('assetsForUrl theo trang', () {
+    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/chat')).js,
+        contains('chat.js'));
+    expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/')).js,
+        ['base.js']);
   });
 }

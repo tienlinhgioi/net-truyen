@@ -3,14 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import 'auth_sync.dart';
 import 'injector.dart';
 import 'theme.dart';
 import 'url_policy.dart';
 import 'widgets/error_view.dart';
 
 class WebTab extends StatefulWidget {
-  const WebTab({super.key, required this.initialUrl});
+  const WebTab({super.key, required this.initialUrl, required this.sync});
   final String initialUrl;
+  final AuthSync sync;
 
   @override
   State<WebTab> createState() => _WebTabState();
@@ -20,8 +22,8 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
   late final WebViewController _c;
   int _progress = 0;
   String? _error;
-  String _css = '';
-  String _js = '';
+  String? _loadedAuth;
+  Uri _current = Uri.parse('about:blank');
 
   @override
   bool get wantKeepAlive => true;
@@ -29,7 +31,9 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
+    widget.sync.addListener(_onAuthChanged);
     _c = WebViewController()
+      ..addJavaScriptChannel('NetVip', onMessageReceived: _onMessage)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(kBg)
       ..setNavigationDelegate(NavigationDelegate(
@@ -45,8 +49,14 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
           }
         },
         onProgress: (p) => setState(() => _progress = p),
-        onPageStarted: (_) => setState(() => _error = null),
-        onPageFinished: (_) => _inject(),
+        onPageStarted: (u) {
+          _current = Uri.tryParse(u) ?? _current;
+          setState(() => _error = null);
+        },
+        onPageFinished: (u) {
+          _current = Uri.tryParse(u) ?? _current;
+          _inject();
+        },
         onWebResourceError: (e) {
           if (e.isForMainFrame ?? false) {
             setState(() => _error = 'Không tải được trang. Kiểm tra mạng.');
@@ -56,14 +66,41 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
     _load();
   }
 
-  Future<void> _load() async {
-    _css = await rootBundle.loadString('assets/inject/base.css');
-    _js = await rootBundle.loadString('assets/inject/base.js');
-    await _c.loadRequest(Uri.parse(widget.initialUrl));
+  Future<void> _load() => _c.loadRequest(Uri.parse(widget.initialUrl));
+
+  void _onMessage(JavaScriptMessage m) {
+    final t = m.message;
+    if (t == 'refresh') {
+      _c.reload();
+    } else if (t.startsWith('auth:')) {
+      _loadedAuth = t.substring(5);
+      widget.sync.report(_loadedAuth!);
+    }
   }
 
-  Future<void> _inject() =>
-      _c.runJavaScript(buildInjectionScript(css: _css, js: _js));
+  // Đăng nhập/đăng xuất ở tab khác: tải lại tab này cho đồng bộ.
+  void _onAuthChanged() {
+    if (_loadedAuth != null && _loadedAuth != widget.sync.state) _c.reload();
+  }
+
+  Future<String> _asset(String n) => rootBundle.loadString('assets/inject/$n');
+
+  Future<void> _inject() async {
+    final a = assetsForUrl(_current);
+    final css = (await Future.wait(a.css.map(_asset))).join('\n');
+    var js = '';
+    if (a.js.contains('chat.js')) {
+      js += 'window.__NV_STICKERS=${await _asset('stickers.json')};\n';
+    }
+    js += (await Future.wait(a.js.map(_asset))).join('\n');
+    await _c.runJavaScript(buildInjectionScript(css: css, js: js));
+  }
+
+  @override
+  void dispose() {
+    widget.sync.removeListener(_onAuthChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,11 +119,7 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
         if (_error != null)
           ErrorView(message: _error!, onRetry: () => _c.reload())
         else
-          RefreshIndicator(
-            color: kAccent,
-            onRefresh: () => _c.reload(),
-            child: WebViewWidget(controller: _c),
-          ),
+          WebViewWidget(controller: _c),
         if (_progress < 100 && _error == null)
           LinearProgressIndicator(
               value: _progress / 100, color: kAccent, minHeight: 2),

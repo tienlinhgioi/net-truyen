@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'auth_sync.dart';
 import 'config.dart';
 import 'web_tab.dart';
 
@@ -13,7 +14,7 @@ class NetVipShell extends StatefulWidget {
 
 const kTabs = <(String, IconData, String)>[
   ('Trang chủ', Icons.home_rounded, '/'),
-  ('Theo dõi', Icons.bookmark_rounded, '/auth/login'),
+  ('Theo dõi', Icons.bookmark_rounded, '/user/bookmarks'),
   ('Lịch sử', Icons.history_rounded, '/lich-su'),
   ('Chat', Icons.chat_bubble_rounded, '/chat'),
   ('Tài khoản', Icons.person_rounded, '/user/profile'),
@@ -26,7 +27,9 @@ class _NetVipShellState extends State<NetVipShell> {
   @override
   void initState() {
     super.initState();
-    final build = widget.buildTab ?? (u) => WebTab(initialUrl: u);
+    final sync = AuthSync();
+    final build =
+        widget.buildTab ?? (u) => WebTab(initialUrl: u, sync: sync);
     _tabs = [for (final t in kTabs) build('$kBaseUrl${t.$3}')];
   }
 

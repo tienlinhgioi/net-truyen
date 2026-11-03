@@ -14,3 +14,14 @@ $js
 }catch(e){}
 })();''';
 }
+
+/// Danh sách asset (css, js) chèn cho từng đường dẫn.
+({List<String> css, List<String> js}) assetsForUrl(Uri uri) {
+  final css = ['base.css'];
+  final js = ['base.js'];
+  if (uri.path == '/chat' || uri.path.startsWith('/chat/')) {
+    css.add('chat.css');
+    js.add('chat.js');
+  }
+  return (css: css, js: js);
+}
