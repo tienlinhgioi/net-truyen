@@ -19,6 +19,7 @@ const assert = require('assert');
   await p.evaluate(fs.readFileSync(A + 'chat.js', 'utf8'));
   await p.waitForSelector('#btnEmoji');
   await p.evaluate(() => document.getElementById('btnEmoji').click());
+  assert.strictEqual(await p.evaluate(() => [...document.querySelectorAll('#nvEmoji img')].filter(i => i.src.startsWith('http:')).length), 0, 'không còn ảnh http (WebView chặn mixed content)');
   // chọn 2 sticker -> hiện 2 chip, panel vẫn mở được chọn tiếp
   await p.evaluate(() => { const g = document.querySelectorAll('#nvEmoji .grid img'); g[0].click(); g[1].click(); });
   assert.strictEqual(await p.locator('#nvChips .chip').count(), 2, '2 chip');

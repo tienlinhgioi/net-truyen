@@ -84,6 +84,9 @@ if (!window.__nvChat) {
   };
   setInterval(tryInit, 500);
   setInterval(function () {
+    // WebView chặn ảnh http trên trang https: đổi sang https.
+    var im = document.querySelectorAll('#listMessages img[src^="http:"]');
+    for (var j = 0; j < im.length; j++) im[j].src = im[j].src.replace('http:', 'https:');
     var a = document.querySelectorAll('#listMessages a[id^="view-img-btn-"]');
     for (var i = 0; i < a.length; i++) a[i].click();
   }, 800);
