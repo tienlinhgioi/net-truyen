@@ -1,0 +1,3 @@
+/* Ẩn quảng cáo; app đã có thanh điều hướng native */
+ins.adsbygoogle, iframe[src*="googlesyndication"], iframe[src*="doubleclick"] { display: none !important; }
+body { padding-bottom: 8px; }
