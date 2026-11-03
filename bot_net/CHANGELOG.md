@@ -1,5 +1,12 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.4
+- Hiện phần trăm mức dùng của từng API key theo ngày (kèm thanh màu): số lượt hôm nay / giới hạn. Giới hạn tự học từ thông báo hết hạn mức của Google (theo ngày và theo phút), hoặc bạn gõ tay trong Cài đặt, mục "Giới hạn lượt theo model".
+- Sửa lỗi Cài đặt và Tài khoản cho kết quả kiểm tra key khác nhau: cả hai dùng chung một cách kiểm tra (gửi yêu cầu nhỏ qua model chat chữ của tài khoản), hiển thị cùng nội dung, và hiện lý do lỗi thật của Google (mã HTTP và lời báo).
+- Phân loại lỗi key chính xác theo dữ liệu thật của Google: key sai/hết hạn/bị khóa, hết hạn mức theo ngày hay theo phút, 403 tạm thời, vùng không hỗ trợ. 403 tạm thời không còn làm key bị coi là chết; hết hạn mức theo phút nghỉ đúng thời gian Google yêu cầu, theo ngày nghỉ lâu hơn.
+- Sửa lỗi đếm lượt dùng bị mất khi chạy nhiều tài khoản cùng lúc (cộng dồn chung).
+- Kiểm tra key tối đa 2 yêu cầu song song để không tự gây quá hạn mức theo phút.
+
 ## 1.0.3
 - Gửi ảnh không cần khóa nào nữa: ảnh bot tạo được tải lên bằng chính phiên đăng nhập của tài khoản đang chat (đường tải ảnh của web). Bỏ ô khóa imgbb.
 - Sửa nhiều lỗi model và API key: không còn gửi "hướng dẫn hệ thống" rỗng khi kiểm tra; model không hỗ trợ JSON, tắt suy nghĩ hoặc hướng dẫn hệ thống thì tự hạ cấp và thử lại ngay, nhớ khả năng của từng model; thông báo lỗi nêu rõ nguyên nhân kèm mã HTTP.

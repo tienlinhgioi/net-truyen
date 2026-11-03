@@ -1,6 +1,7 @@
 // Danh sách tài khoản (bên phải) và màn sửa từng tài khoản.
 import { h, openSheet, avatarEl, switchEl, toast } from './dom.js';
 import { comboEditor } from './combo.js';
+import { keyRow } from './keyrow.js';
 
 export function openAccounts(mgr) {
   openSheet({
@@ -45,17 +46,6 @@ function openAdd(mgr) {
   });
 }
 
-const maskKey = (k) => (k.length > 10 ? `${k.slice(0, 6)}…${k.slice(-4)}` : '••••');
-
-const keyBadge = (st) => {
-  if (!st) return null;
-  if (st.state === 'ok') return h('span', { class: 'badge ok', text: `Sống ${st.ms}ms` });
-  if (st.state === 'quota') return h('span', { class: 'badge warn', text: 'Hết hạn mức' });
-  if (st.state === 'invalid') return h('span', { class: 'badge bad', text: 'Sai key' });
-  if (st.state === 'model') return h('span', { class: 'badge warn', text: 'Key ok, model chết' });
-  return h('span', { class: 'badge bad', text: 'Lỗi mạng' });
-};
-
 export function openEditor(mgr, id) {
   const a = mgr.account(id);
   if (!a) return;
@@ -71,9 +61,8 @@ export function openEditor(mgr, id) {
       const keyInput = h('input', { type: 'password', placeholder: 'Dán Gemini API key', id: 'keyInput', autocomplete: 'off' });
       const renderKeys = () => {
         keysBox.replaceChildren();
-        a.keys.forEach((k, i) => keysBox.append(h('div', { class: 'keyrow', 'data-key': i },
-          h('span', { class: `tag ${i ? 'alt' : ''}`, text: i ? `Dự phòng ${i}` : 'Chính' }), h('code', { text: maskKey(k) }), keyBadge(mgr.keyStatus[k]),
-          h('button', { class: 'link', text: 'Xóa', onclick: () => { save({ keys: a.keys.filter((_, j) => j !== i) }); renderKeys(); } }))));
+        const model = mgr.checkModelOf(a);
+        a.keys.forEach((k, i) => keysBox.append(keyRow(mgr, { key: k, index: i, model, onRemove: () => { save({ keys: a.keys.filter((_, j) => j !== i) }); renderKeys(); } })));
       };
       renderKeys();
       const addKey = h('button', { class: 'btn', id: 'keyAdd', text: 'Lưu key', onclick: () => {
@@ -86,12 +75,12 @@ export function openEditor(mgr, id) {
       const checkAll = h('button', { class: 'btn ghost', id: 'keyCheckAll', text: 'Kiểm tra tất cả key', onclick: async () => {
         if (!a.keys.length) return toast('Chưa có key nào');
         checkAll.disabled = true; checkAll.textContent = 'Đang kiểm tra...';
-        await mgr.checkAllKeys(a.keys, a.combo.text[0] || mgr.settings.model || '');
+        const res = await mgr.checkAccountKeys([id]);
         checkAll.disabled = false; checkAll.textContent = 'Kiểm tra tất cả key'; renderKeys();
-        const ok = a.keys.filter((k) => mgr.keyStatus[k]?.state === 'ok').length;
-        toast(`${ok}/${a.keys.length} key đang sống`);
+        toast(`${res.filter((r) => r.state === 'ok').length}/${res.length} key đang sống`);
       } });
 
+      const offKeys = mgr.on((t) => { if (t === 'keys' && keysBox.isConnected) renderKeys(); });
       const combo = comboEditor(mgr, { combo: a.combo, keys: () => a.keys, onChange: () => save({ combo: a.combo, model: a.combo.text[0] || '' }) });
 
       const field = (label, el) => h('label', { class: 'f' }, label, el);

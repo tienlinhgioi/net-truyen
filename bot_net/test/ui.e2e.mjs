@@ -32,6 +32,7 @@ const mockInit = () => {
       if (r.url.endsWith('/ajax/chat/list')) return ok({ status: true, data: window.__chat });
       if (r.url.endsWith('/ajax/chat/send')) { const m = new URLSearchParams(r.data).get('message'); window.__sent.push(m); return ok({ status: true }); }
       if ((r.headers['x-goog-api-key'] || '').includes('BAD')) return { status: 400, headers: {}, data: { error: { message: 'API key not valid. Please pass a valid API key.' } } };
+      if ((r.headers['x-goog-api-key'] || '').includes('QUOTA')) return { status: 429, headers: {}, data: { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota', details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '100' }] }] } } };
       if (r.url.includes('models/gemini-pro:')) return { status: 404, headers: {}, data: {} };
       if (r.url.includes('/v1beta/models?')) return ok({ models: [{ name: 'models/gemini-fast', displayName: 'Gemini Fast', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-pro', displayName: 'Gemini Pro', inputTokenLimit: 2000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-2.0-flash-image', displayName: 'Flash Image', inputTokenLimit: 32000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }] });
       if (r.url.includes(':generateContent')) return ok({ candidates: [{ content: { parts: [{ text: `Chào bạn ${++gN}, mình là Ly nè` }] } }], usageMetadata: { totalTokenCount: 21 } });
@@ -113,11 +114,18 @@ await p.locator('.keyrow[data-model="gemini-pro"] button', { hasText: 'Xóa' }).
 // kiểm tra đồng loạt key: thêm một key sai
 await T('#keyInput').fill('AIzaSyBADKEY0000000'); await T('#keyAdd').click();
 await T('#keyCheckAll').click();
-await p.waitForSelector('.keyrow[data-key="2"] .badge.bad');
-assert.match(await p.locator('.keyrow[data-key="0"] .badge').innerText(), /Sống/);
-assert.match(await p.locator('.keyrow[data-key="2"] .badge').innerText(), /Sai key/);
+await p.waitForSelector('.keyblock[data-key="2"] .badge.bad');
+assert.match(await p.locator('.keyblock[data-key="0"] .badge').innerText(), /Sống/);
+assert.match(await p.locator('.keyblock[data-key="2"] .hint.err').innerText(), /HTTP 400.*API key not valid/, 'hiện lý do lỗi thật của Google');
+assert.match(await p.locator('.keyblock[data-key="2"] .badge').innerText(), /Sai/);
 
-await p.locator('.keyrow[data-key="2"] button', { hasText: 'Xóa' }).click();
+await p.locator('.keyblock[data-key="2"] button', { hasText: 'Xóa' }).click();
+// key hết hạn mức theo ngày: app tự học giới hạn 100 lượt/ngày từ lời Google báo
+await T('#keyInput').fill('AIzaSyQUOTA0000000'); await T('#keyAdd').click();
+await T('#keyCheckAll').click();
+await p.waitForSelector('.keyblock[data-key="2"] .badge.warn');
+assert.match(await p.locator('.keyblock[data-key="2"] .badge').innerText(), /Hết hạn mức/);
+const accTexts = (await p.locator('.keyblock .badge').allInnerTexts()).map((x) => x.replace(/\d+ms/, 'Nms'));
 
 // 5) Chat thử (không gửi lên web)
 await T('#testIn').fill('chào Ly'); await T('#testGo').click();
@@ -157,6 +165,17 @@ assert.equal(st.chatDelayMs, 7000); assert.equal(st.maxChars, 90); assert.deepEq
 
 await T('#checkAllAcc').click();
 await p.waitForSelector('#allKeys .badge.ok');
+// kết quả ở Cài đặt phải GIỐNG HỆT màn Tài khoản (cùng cách kiểm tra)
+const setTexts = (await p.locator('#allKeys .keyblock .badge').allInnerTexts()).map((x) => x.replace(/\d+ms/, 'Nms'));
+assert.deepEqual(setTexts, accTexts, 'Cài đặt và Tài khoản phải cho cùng kết quả');
+// phần trăm mức dùng theo giới hạn đã học (100 lượt/ngày), rồi đổi giới hạn thủ công
+const q0 = await p.locator('#allKeys .keyblock').first().locator('.quota').innerText();
+assert.match(q0, /\d+\/100 lượt/); assert.match(q0, /\d+%/); assert.match(q0, /tự học/);
+await T('[data-lim="gemini-fast:rpd"]').fill('200'); await T('[data-lim="gemini-fast:rpd"]').blur();
+await p.locator('#allKeys').evaluate(() => {});
+await T('#checkAllAcc').click(); await p.waitForFunction(() => document.querySelector('#checkAllAcc').textContent.includes('Kiểm tra đồng loạt'));
+assert.match(await p.locator('#allKeys .keyblock').first().locator('.quota').innerText(), /\/200 lượt/);
+await p.locator('#allKeys').scrollIntoViewIfNeeded(); await shot('7-keys');
 await T('#openReport').click();
 await p.waitForSelector('.rep');
 await p.locator('.sheet .back').last().click();
@@ -169,7 +188,7 @@ assert.equal(await p.evaluate(() => window.__mgr.runningAccounts().length), 1);
 
 // 9) Lưu bền vững: tài khoản giữ nguyên key, lệnh, mô hình sau khi mở lại app
 const a = await p.evaluate(() => window.__mgr.accounts[0]);
-assert.equal(a.keys.length, 2); assert.equal(a.command, '/ly'); assert.equal(a.model, 'gemini-fast'); assert.deepEqual(a.combo.text, ['gemini-fast', 'gemini-custom']); assert.deepEqual(a.aliases, ['bé ly', 'ly ly']); assert.equal(a.maxChars, 120);
+assert.equal(a.keys.length, 3); assert.equal(a.command, '/ly'); assert.equal(a.model, 'gemini-fast'); assert.deepEqual(a.combo.text, ['gemini-fast', 'gemini-custom']); assert.deepEqual(a.aliases, ['bé ly', 'ly ly']); assert.equal(a.maxChars, 120);
 
 // 10) Xuất cấu hình không kèm bí mật
 const exp = JSON.parse(await p.evaluate(() => window.__mgr.exportConfig(false)));

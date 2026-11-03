@@ -118,3 +118,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .pill { padding: 8px 14px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); font-size: 13px; }
 .pill.danger { color: var(--bad); border-color: rgba(255,90,106,.5); }
 .hint { font-size: 12px; color: var(--muted); }
+
+/* ===== Mức dùng API key ===== */
+.keyblock { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,.22); }
+.keyblock .keyrow { background: none; padding: 0; }
+.quota .bar i.ok { background: var(--ok); } .quota .bar i.warn { background: var(--warn); } .quota .bar i.bad { background: var(--bad); }
+.pct { font-size: 13px; } .pct.ok { color: var(--ok); } .pct.warn { color: var(--warn); } .pct.bad { color: var(--bad); }
+.hint.err { color: var(--bad); word-break: break-word; }
+.limrow { display: grid; grid-template-columns: 1fr 76px 76px; gap: 8px; align-items: center; font-size: 13px; }
+.limrow input { padding: 8px; font-size: 13px; }

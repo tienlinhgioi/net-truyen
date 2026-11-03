@@ -12,7 +12,7 @@ export function defaultSettings() {
     sensitiveWords: ['đm', 'địt', 'cặc', 'lồn', 'vcl', 'đéo', 'mẹ mày', 'óc chó', 'cút đi'],
     maxChars: 200, maxChain: 2, contextSize: 6, model: '', blockedWords: [],
     runInBackground: true, profileRefreshMs: 30 * 60 * 1000, wallpaperBlur: 0, panelAlpha: 0.07,
-    combo: { text: [], image: [], vision: [] },
+    combo: { text: [], image: [], vision: [] }, modelLimits: {},
     schedule: { enabled: false, from: '08:00', to: '22:00', weekdays: [0, 1, 2, 3, 4, 5, 6], dateFrom: '', dateTo: '' },
   };
 }
@@ -27,7 +27,7 @@ export function defaultAccount() {
 
 /** Lưu bằng bộ nhớ trừu tượng {get(key), set(key, value)} (Capacitor Preferences hoặc localStorage). */
 export class Store {
-  constructor(adapter) { this.adapter = adapter; this.settings = defaultSettings(); this.accounts = []; this.usage = {}; this.memory = {}; }
+  constructor(adapter) { this.adapter = adapter; this.settings = defaultSettings(); this.accounts = []; this.usage = {}; this.memory = {}; this.limitsLearned = {}; }
 
   async load() {
     const raw = await this.adapter.get('botnet');
@@ -37,6 +37,7 @@ export class Store {
       this.accounts = (d.accounts || []).map((a) => ({ ...defaultAccount(), ...a }));
       this.usage = d.usage || {};
       this.memory = d.memory || {};
+      this.limitsLearned = d.limitsLearned || {};
     }
     return this;
   }

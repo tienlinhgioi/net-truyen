@@ -2,7 +2,8 @@
 import { Store, defaultAccount } from './core/store.js';
 import { AccountBot, BotSet, buildSystem } from './core/runner.js';
 import { ChatClient } from './core/chatclient.js';
-import { generateCombo, listModels, checkKeys, checkModel } from './core/gemini.js';
+import { generateCombo, listModels, checkKey, checkModel } from './core/gemini.js';
+import { LimitBook, percentOf } from './core/limits.js';
 import { ModelHealth } from './core/combo.js';
 import { parseDirective } from './core/directive.js';
 import { UserMemory } from './core/convo.js';
@@ -13,7 +14,7 @@ export class Manager {
   constructor({ adapter, http, service = null, sleep, loadStickers = null }) {
     this.store = new Store(adapter);
     this.http = http; this.service = service; this.sleep = sleep; this.loadStickers = loadStickers;
-    this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.svcKey = null; this.paused = [];
+    this.stickers = []; this.memory = {}; this.keyStatus = {}; this.modelStatus = {}; this.limits = new LimitBook(); this.svcKey = null; this.paused = [];
     this.bots = new Map();
     this.botSet = new BotSet();
     this.logs = [];
@@ -26,6 +27,7 @@ export class Manager {
     await this.store.load();
     this.usage = this.store.usage || {};
     this.memory = this.store.memory || {};
+    this.limits = LimitBook.from(this.store.limitsLearned, this.store.settings.modelLimits);
     try { this.stickers = (await this.loadStickers?.()) || []; } catch { this.stickers = []; }
     for (const a of this.store.accounts) this.botSet.add(a);
     for (const a of this.store.accounts) if (a.enabled) this.#spawn(a);
@@ -57,23 +59,28 @@ export class Manager {
 
   async saveNow() {
     clearTimeout(this.saveTimer); this.saveTimer = null;
-    for (const b of this.bots.values()) this.#mergeUsage(b.pool.exportUsage());
     this.store.usage = this.usage;
     for (const [id, b] of this.bots) this.memory[id] = b.memory.toJSON();
-    await this.store.adapter.set('botnet', JSON.stringify({ settings: this.store.settings, accounts: this.store.accounts, usage: this.usage, memory: this.memory }));
+    await this.store.adapter.set('botnet', JSON.stringify({ settings: this.store.settings, accounts: this.store.accounts, usage: this.usage, memory: this.memory, limitsLearned: this.limits.toJSON() }));
   }
 
-  #mergeUsage(u) {
-    for (const [day, keys] of Object.entries(u)) this.usage[day] = keys;
+  /** Cộng dồn lượt dùng theo ngày/key/model (dùng chung cho mọi tài khoản và chat thử). */
+  recordUsage(key, model, tokens = 0) {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const u = (((this.usage[day] ??= {})[key] ??= {})[model] ??= { requests: 0, tokens: 0 });
+    u.requests++; u.tokens += tokens;
+    this.save();
   }
 
   #spawn(account) {
     if (this.bots.has(account.id)) return;
     const bot = new AccountBot({
       account, getSettings: () => this.store.settings, http: this.http, bots: this.botSet,
-      sleep: this.sleep, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l), save: () => { this.save(); this.emit('account', account); },
+      sleep: this.sleep, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
+      onRecord: (key, model, tokens) => this.recordUsage(key, model, tokens),
+      onLimit: (model, l) => { this.limits.learn(model, l); this.save(); this.emit('keys'); }, save: () => { this.save(); this.emit('account', account); },
     });
-    bot.pool.importUsage(JSON.parse(JSON.stringify(this.usage)));
     this.bots.set(account.id, bot);
     bot.start();
   }
@@ -142,6 +149,7 @@ export class Manager {
 
   updateSettings(patch) {
     Object.assign(this.store.settings, patch);
+    this.limits.setUser(this.store.settings.modelLimits);
     this.#syncService();
     this.save();
     this.emit('settings');
@@ -154,7 +162,7 @@ export class Manager {
     const models = comboFor(a, st, 'text');
     if (!models.length) throw new Error('Chưa chọn model Gemini');
     if (!a.keys.length) throw new Error('Chưa có API key');
-    const out = await generateCombo({ http: this.http, pool: new KeyPool(a.keys), health: new ModelHealth(), models, system: buildSystem(a, st), context: [], question: text, asker: 'Người thử', mode: 'json', keyDelayMs: 0, sleep: async () => {} });
+    const out = await generateCombo({ http: this.http, pool: new KeyPool(a.keys, { onRecord: (k, m, t) => this.recordUsage(k, m, t) }), health: new ModelHealth(), models, system: buildSystem(a, st), context: [], question: text, asker: 'Người thử', mode: 'json', keyDelayMs: 0, sleep: async () => {} });
     return { text: parseDirective(out.text).reply || '(không có nội dung)', model: out.model };
   }
 
@@ -206,13 +214,45 @@ export class Manager {
     return changed;
   }
 
-  /** Kiểm tra đồng loạt API key (của một tài khoản hoặc tất cả); trả về kết quả theo thứ tự. */
-  async checkAllKeys(keys, model) {
-    const uniq = [...new Set(keys)];
-    const res = await checkKeys(this.http, uniq, { concurrency: 3, model });
-    for (const r of res) this.keyStatus[r.key] = { state: r.state, ms: r.ms, at: Date.now() };
+  keyStatusFor(key, model) { return this.keyStatus[`${key}|${model || ''}`]; }
+
+  /** Model dùng để kiểm tra key của một tài khoản: model chat chữ đầu tiên (không có thì kiểm tra bằng danh sách model). */
+  checkModelOf(account) { return comboFor(account, this.settings, 'text')[0] || ''; }
+
+  /** Số lượt đã dùng hôm nay, giới hạn (tự học hoặc người dùng đặt) và phần trăm cho một key + model. */
+  quotaInfo(key, model) {
+    const u = this.usageFor(key, model);
+    const lim = this.limits.get(model);
+    return { ...u, rpd: lim.rpd, rpm: lim.rpm, learned: !!lim.learned, percent: percentOf(u.requests, lim.rpd) };
+  }
+
+  /**
+   * Kiểm tra đồng loạt API key của các tài khoản. Cả màn Cài đặt và màn Tài khoản đều gọi hàm này
+   * (cùng cách kiểm tra: gửi yêu cầu nhỏ qua model chat chữ của tài khoản) nên kết quả luôn giống nhau.
+   */
+  async checkAccountKeys(ids) {
+    const jobs = [];
+    const seen = new Set();
+    for (const id of ids) {
+      const a = this.account(id);
+      if (!a) continue;
+      const model = this.checkModelOf(a);
+      for (const key of a.keys) { const k = `${key}|${model}`; if (!seen.has(k)) { seen.add(k); jobs.push({ key, model }); } }
+    }
+    let i = 0;
+    const worker = async () => {
+      while (i < jobs.length) {
+        const j = jobs[i++];
+        let r;
+        try { r = await checkKey(this.http, j.key, j.model); } catch (e) { r = { state: 'error', ms: 0, detail: e.message }; }
+        if (r.limit) this.limits.learn(j.model, r.limit);
+        this.keyStatus[`${j.key}|${j.model}`] = { ...r, model: j.model, at: Date.now() };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(2, jobs.length) }, worker));
+    this.save();
     this.emit('keys');
-    return res;
+    return jobs.map((j) => ({ ...j, ...this.keyStatusFor(j.key, j.model) }));
   }
 
   /** Kiểm tra model nào còn sống (dùng key khả dụng đầu tiên). */

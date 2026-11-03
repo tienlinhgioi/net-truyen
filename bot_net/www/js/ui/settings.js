@@ -2,6 +2,7 @@
 import { h, openSheet, switchEl, toast } from './dom.js';
 import { comboEditor } from './combo.js';
 import { openReport } from './report.js';
+import { keyRow } from './keyrow.js';
 import { pickImageAsDataUrl, download, pickTextFile } from '../platform.js';
 
 const DAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -37,22 +38,38 @@ export function openSettings(mgr, applyTheme) {
       const keyReport = h('div', { class: 'sec', id: 'allKeys' });
       const renderKeyReport = () => {
         keyReport.replaceChildren();
-        for (const a of mgr.accounts) for (const [i, k] of a.keys.entries()) {
-          const x = mgr.keyStatus[k];
-          const txt = !x ? 'chưa kiểm tra' : x.state === 'ok' ? `sống ${x.ms}ms` : x.state === 'quota' ? 'hết hạn mức' : x.state === 'invalid' ? 'sai key' : x.state;
-          keyReport.append(h('div', { class: 'keyrow' }, h('span', { class: `tag ${i ? 'alt' : ''}`, text: i ? `DP${i}` : 'Chính' }), h('code', { text: `${a.displayName || a.name} · ${k.slice(0, 6)}…${k.slice(-4)}` }),
-            h('span', { class: `badge ${x?.state === 'ok' ? 'ok' : x ? 'bad' : ''}`, text: txt })));
+        for (const a of mgr.accounts) {
+          if (!a.keys.length) continue;
+          const model = mgr.checkModelOf(a);
+          keyReport.append(h('div', { class: 'muted', text: `${a.displayName || a.name} · model ${model || '(chưa chọn)'}` }));
+          a.keys.forEach((k, i) => keyReport.append(keyRow(mgr, { key: k, index: i, model })));
         }
       };
       renderKeyReport();
       const checkAll = h('button', { class: 'btn ghost', id: 'checkAllAcc', text: 'Kiểm tra đồng loạt tất cả API key', onclick: async () => {
-        const keys = mgr.accounts.flatMap((a) => a.keys);
-        if (!keys.length) return toast('Chưa có key nào');
+        if (!mgr.accounts.some((a) => a.keys.length)) return toast('Chưa có key nào');
         checkAll.disabled = true; checkAll.textContent = 'Đang kiểm tra...';
-        const res = await mgr.checkAllKeys(keys, '');
+        const res = await mgr.checkAccountKeys(mgr.accounts.map((a) => a.id));
         checkAll.disabled = false; checkAll.textContent = 'Kiểm tra đồng loạt tất cả API key'; renderKeyReport();
         toast(`${res.filter((r) => r.state === 'ok').length}/${res.length} key đang sống`);
       } });
+
+      // Giới hạn lượt theo model: tự học từ lỗi hạn mức của Google, bạn sửa tay được.
+      const limBox = h('div', { class: 'sec', id: 'limBox' });
+      const renderLimits = () => {
+        limBox.replaceChildren();
+        const models = [...new Set([...mgr.accounts.flatMap((a) => ['text', 'image', 'vision'].flatMap((r) => mgr.comboModels(a, r))), ...['text', 'image', 'vision'].flatMap((r) => st.combo[r] || [])])];
+        if (!models.length) { limBox.append(h('span', { class: 'hint', text: 'Chưa có model nào trong combo.' })); return; }
+        limBox.append(h('div', { class: 'limrow hint' }, h('span', { text: 'Model' }), h('span', { text: 'Lượt/ngày' }), h('span', { text: 'Lượt/phút' })));
+        for (const m of models) {
+          const g = mgr.limits.get(m), u = st.modelLimits[m] || {};
+          const inp = (k, v, id) => h('input', { type: 'number', min: 0, 'data-lim': `${m}:${k}`, id, value: u[k] || '', placeholder: v ? `${v}${g.learned ? '*' : ''}` : '?',
+            onchange: (e) => { const n = Math.max(0, Number(e.target.value) || 0); const next = { ...st.modelLimits, [m]: { ...(st.modelLimits[m] || {}), [k]: n } }; set({ modelLimits: next }); } });
+          limBox.append(h('div', { class: 'limrow' }, h('code', { text: m }), inp('rpd', g.rpd), inp('rpm', g.rpm)));
+        }
+        limBox.append(h('span', { class: 'hint', text: 'Số có dấu * do app tự học từ thông báo hết hạn mức của Google. Gõ số của bạn để ghi đè (hạn mức khác nhau tùy gói và model).' }));
+      };
+      renderLimits();
 
       body.append(
         h('div', { class: 'sec' }, h('h3', { text: 'Giao diện' }),
@@ -64,7 +81,8 @@ export function openSettings(mgr, applyTheme) {
         h('div', { class: 'sec' }, h('h3', { text: 'Combo model chung' }),
           h('span', { class: 'hint', text: 'Dùng khi tài khoản không có combo riêng.' }),
           comboEditor(mgr, { combo: st.combo, keys: () => mgr.accounts.flatMap((a) => a.keys), onChange: () => set({ combo: st.combo }) })),
-        h('div', { class: 'sec' }, h('h3', { text: 'API key' }), checkAll, keyReport),
+        h('div', { class: 'sec' }, h('h3', { text: 'API key và mức dùng' }), checkAll, keyReport),
+        h('div', { class: 'sec' }, h('h3', { text: 'Giới hạn lượt theo model' }), limBox),
         h('div', { class: 'sec' }, h('h3', { text: 'Delay và tốc độ' }),
           num('Khoảng cách tối thiểu giữa 2 tin (delay chat)', 'chatDelayMs', 'giây', 'setChatDelay', 1000), num('Delay đổi API key', 'keyDelayMs', 'giây', 'setKeyDelay', 1000),
           num('Delay tự kết nối lại', 'reconnectDelayMs', 'giây', 'setReconDelay', 1000), num('Quét chat mỗi', 'pollMs', 'giây', 'setPoll', 1000),

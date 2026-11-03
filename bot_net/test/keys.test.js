@@ -44,3 +44,10 @@ test('KeyPool: đếm lượt dùng theo key/mô hình/ngày', () => {
   assert.deepEqual(p.usage('A', 'gemini-x'), { requests: 2, tokens: 200 });
   assert.deepEqual(p.usage('A', 'khac'), { requests: 0, tokens: 0 });
 });
+
+test('KeyPool: báo mỗi lượt dùng ra ngoài để nơi quản lý cộng dồn chung giữa các tài khoản', () => {
+  const seen = [];
+  const p = new KeyPool(['A'], { onRecord: (k, m, t) => seen.push([k, m, t]) });
+  p.record('A', 'm', 30); p.record('A', 'm', 5);
+  assert.deepEqual(seen, [['A', 'm', 30], ['A', 'm', 5]]);
+});

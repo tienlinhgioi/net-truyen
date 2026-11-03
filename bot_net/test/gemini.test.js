@@ -27,7 +27,7 @@ test('parseResponse: bị chặn/rỗng thì ném lỗi blocked', () => {
 test('classifyError', () => {
   assert.equal(classifyError(429, {}), 'quota');
   assert.equal(classifyError(400, { error: { message: 'API key not valid. Please pass a valid API key.' } }), 'invalid');
-  assert.equal(classifyError(403, {}), 'invalid');
+  assert.equal(classifyError(403, {}), 'denied');
   assert.equal(classifyError(404, {}), 'model');
   assert.equal(classifyError(503, {}), 'server');
 });
