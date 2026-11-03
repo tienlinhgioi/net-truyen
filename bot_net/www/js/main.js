@@ -41,11 +41,32 @@ function renderStage() {
   document.getElementById('whoName').textContent = first ? (first.displayName || first.name).split(' ').slice(-1)[0] : 'TK';
 }
 
-function addLog(e) {
-  const ul = document.getElementById('log');
-  if (!e) { ul.replaceChildren(); return; }
+// Nhật ký riêng từng tài khoản: chọn "Tất cả" hoặc một tài khoản để xem
+let logSel = null;
+const logLi = (e, withName) => {
   const acc = mgr.account(e.acc);
-  ul.append(h('li', { class: e.level }, h('small', { text: `${fmtTime(e.t)} · ${acc?.displayName || acc?.name || ''}` }), e.text));
+  return h('li', { class: e.level, 'data-acc': e.acc || '' }, h('small', { text: `${fmtTime(e.t)}${withName ? ` · ${acc?.displayName || acc?.name || ''}` : ''}` }), e.text);
+};
+
+function renderLog() {
+  const ul = document.getElementById('log');
+  ul.replaceChildren(...mgr.logsOf(logSel).slice(-120).map((e) => logLi(e, !logSel)));
+  ul.scrollTop = ul.scrollHeight;
+}
+
+function renderLogTabs() {
+  const tabs = document.getElementById('logTabs');
+  if (logSel && !mgr.account(logSel)) logSel = null;
+  const chip = (id, label) => h('button', { class: `chip ${(logSel || '') === id ? 'on' : ''}`, 'data-acc': id, role: 'tab', text: label, onclick: () => { logSel = id || null; renderLogTabs(); renderLog(); } });
+  tabs.replaceChildren(chip('', 'Tất cả'), ...mgr.accounts.map((a) => chip(a.id, a.displayName || a.name || a.email)));
+  tabs.style.display = mgr.accounts.length > 1 ? 'flex' : 'none';
+}
+
+function addLog(e) {
+  if (!e) { renderLog(); return; }
+  if (logSel && e.acc !== logSel) return;
+  const ul = document.getElementById('log');
+  ul.append(logLi(e, !logSel));
   while (ul.children.length > 120) ul.firstChild.remove();
   ul.scrollTop = ul.scrollHeight;
 }
@@ -55,15 +76,15 @@ mgr.on((type, data) => {
     addLog(data);
     const ring = document.querySelector(`.ring[data-id="${data?.acc}"]`);
     if (ring && /Đã trả lời/.test(data.text)) { ring.classList.add('busy'); setTimeout(() => ring.classList.remove('busy'), 1500); }
-  } else if (type === 'accounts' || type === 'account') renderStage();
+  } else if (type === 'accounts' || type === 'account') { renderStage(); renderLogTabs(); }
 });
 
 document.getElementById('btnSettings').onclick = () => openSettings(mgr, applyTheme);
 document.getElementById('btnAccounts').onclick = () => openAccounts(mgr);
 document.getElementById('btnReport').onclick = () => openReport(mgr);
 document.getElementById('btnPause').onclick = () => { if (mgr.runningAccounts().length) { mgr.pauseAll(); } else { mgr.resumeAll(); } renderStage(); };
-document.getElementById('btnClearLog').onclick = () => mgr.clearLogs();
-applyTheme(); renderStage(); mgr.logs.forEach(addLog);
+document.getElementById('btnClearLog').onclick = () => mgr.clearLogs(logSel);
+applyTheme(); renderStage(); renderLogTabs(); renderLog(); 
 
 // Lưu ngay khi app bị ẩn/đóng để không mất thay đổi.
 addEventListener('pagehide', () => mgr.saveNow());

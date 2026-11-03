@@ -1,5 +1,10 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.13
+- Sửa lỗi nhiều tài khoản trả lời lẫn lộn. Nguyên nhân: (1) lệnh gọi mặc định /ai giống nhau ở mọi tài khoản nên một tin "/ai ..." làm tất cả cùng trả lời; (2) tin tự chen vào: nhiều tài khoản cùng chen vào một tin; (3) học nhận dạng bản thân dựa vào chữ trùng với tin mình vừa gửi nên hai tài khoản gửi câu giống nhau có thể nhận nhầm tin của nhau.
+- Giờ có điều phối giữa các tài khoản cùng phòng: gọi đích danh (tên hoặc biệt danh) thì đúng tài khoản được gọi trả lời; chỉ gọi bằng lệnh chung thì chỉ MỘT tài khoản (tài khoản đầu tiên đang chạy) trả lời; tin chen ngang và tiếp tục trò chuyện mỗi tin chỉ một tài khoản giữ quyền; tin đã gọi tên một tài khoản thì tài khoản khác không chen vào. Tài khoản không nhận nhầm tin đã thuộc về tài khoản khác.
+- Nhật ký riêng từng tài khoản: màn chính có thẻ chọn "Tất cả" hoặc từng tài khoản, mỗi tài khoản giữ tối đa 200 dòng riêng (tài khoản nói nhiều không đẩy nhật ký của tài khoản khác), nút Xóa chỉ xóa phần đang xem; màn sửa tài khoản có mục nhật ký riêng của tài khoản đó.
+
 ## 1.0.12
 - Sửa lỗi chat cập nhật chậm. Đo thật: mỗi lần quét chat mất khoảng 0,5 giây (máy chủ Cloudflare, 36 KB đã nén), web không hỗ trợ chỉ lấy tin mới, web gốc tự quét mỗi 1 giây. Nguyên nhân trong app: (1) mỗi tài khoản chỉ có MỘT vòng lặp vừa quét vừa trả lời, nên lúc đang "gõ", chờ khoảng cách giữa hai tin hay hỏi Gemini thì không quét chat, tin mới bị trễ hàng chục giây (đo: lần quét bị dừng 792ms khi nhịp chuẩn là 100ms); (2) thời gian quét bị cộng thêm vào thời gian nghỉ nên chu kỳ thật dài hơn đặt; (3) mỗi tài khoản quét riêng cùng một phòng.
 - Giờ vòng quét và vòng trả lời chạy song song nên nhịp quét luôn đều (đo lại: lần quét lâu nhất khi bận còn 122ms trên nhịp chuẩn 100ms). Chu kỳ tính đúng: thời gian quét được trừ vào thời gian nghỉ. Nhịp quét mặc định 1 giây (như web), 0,7 giây khi đang trò chuyện.

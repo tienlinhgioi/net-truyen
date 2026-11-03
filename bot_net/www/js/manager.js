@@ -8,6 +8,7 @@ import { ModelHealth } from './core/combo.js';
 import { parseDirective } from './core/directive.js';
 import { UserMemory } from './core/convo.js';
 import { RoomFeed } from './core/feed.js';
+import { routeMention, ClaimBoard } from './core/route.js';
 import { comboFor, filterForRole, rankModels } from './core/combo.js';
 import { KeyPool } from './core/keys.js';
 
@@ -19,7 +20,7 @@ export class Manager {
     this.bots = new Map();
     this.feed = new RoomFeed({ maxAgeMs: 600 }); // các tài khoản cùng phòng chia sẻ một lần quét
     this.botSet = new BotSet();
-    this.logs = [];
+    this.logsByAcc = new Map(); this.claims = new ClaimBoard();
     this.usage = {};
     this.listeners = new Set();
     this.saveTimer = null;
@@ -47,11 +48,30 @@ export class Manager {
   on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit(type, data) { for (const f of this.listeners) f(type, data); }
 
+  /** Nhật ký riêng từng tài khoản (mỗi tài khoản giữ tối đa 200 dòng, không đẩy nhật ký của nhau). */
   log(entry) {
-    this.logs.push(entry);
+    const k = entry?.acc || '_';
+    const arr = this.logsByAcc.get(k) || this.logsByAcc.set(k, []).get(k);
+    arr.push(entry);
+    if (arr.length > 200) arr.shift();
     if (entry?.level === 'error' && /Hết API key/.test(entry.text) && this.service) this.service.update('Cảnh báo: hết API key khả dụng');
-    if (this.logs.length > 300) this.logs.shift();
     this.emit('log', entry);
+  }
+
+  /** Nhật ký của một tài khoản; id rỗng = gộp tất cả tài khoản theo thời gian. */
+  logsOf(id) {
+    if (id) return [...(this.logsByAcc.get(id) || [])];
+    return [...this.logsByAcc.values()].flat().sort((a, b) => a.t - b.t);
+  }
+
+  /** Điều phối nhiều tài khoản cùng phòng: ai được trả lời tin nào. */
+  coordinatorFor(id) {
+    const running = () => this.accounts.filter((a) => this.bots.has(a.id) || a.id === id);
+    return {
+      allowed: (m) => routeMention(m.message, running()).includes(id),
+      addressed: (m) => routeMention(m.message, running()).length > 0,
+      claim: (mid) => this.claims.claim(mid, id),
+    };
   }
 
   /** Lưu có trễ 300ms, gom nhiều thay đổi liên tiếp thành một lần ghi (không bị dồn mãi). */
@@ -78,7 +98,7 @@ export class Manager {
     if (this.bots.has(account.id)) return;
     const bot = new AccountBot({
       account, getSettings: () => this.store.settings, http: this.http, bots: this.botSet,
-      sleep: this.sleep, feed: this.feed, stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
+      sleep: this.sleep, feed: this.feed, coordinator: this.coordinatorFor(account.id), stickers: this.stickers, memory: UserMemory.from(this.memory[account.id]), log: (l) => this.log(l),
       onRecord: (key, model, tokens) => this.recordUsage(key, model, tokens),
       quotaPct: (model) => this.modelPercent(account, model),
       onLimit: (model, l, ctx) => { this.#learnLimit(model, l, ctx?.key, ctx?.plan); this.emit('keys'); },
@@ -196,7 +216,7 @@ export class Manager {
     this.emit('accounts'); this.emit('settings');
   }
 
-  clearLogs() { this.logs.length = 0; this.emit('log', null); }
+  clearLogs(id) { if (id) this.logsByAcc.delete(id); else this.logsByAcc.clear(); this.emit('log', null); }
 
   /**
    * App ra nền / quay lại. Nếu "Chạy ngầm" tắt thì bot dừng hẳn khi app ra nền (không đổi trạng thái bật/tắt

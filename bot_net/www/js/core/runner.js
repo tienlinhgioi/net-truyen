@@ -16,13 +16,15 @@ import { ConvoTracker, UserMemory } from './convo.js';
 
 /** Tập các tài khoản bot (theo user_id chat hoặc tên hiển thị) để chống vòng lặp. */
 export class BotSet {
-  constructor() { this.ids = new Set(); this.names = new Set(); }
+  constructor() { this.ids = new Set(); this.names = new Set(); this.idOwner = new Map(); this.nameOwner = new Map(); }
   add(acc) {
-    if (acc.chatUserId) this.ids.add(acc.chatUserId);
+    if (acc.chatUserId) { this.ids.add(acc.chatUserId); this.idOwner.set(acc.chatUserId, acc.id); }
     const n = normalize(acc.displayName || acc.name);
-    if (n) this.names.add(n);
+    if (n) { this.names.add(n); if (!this.nameOwner.has(n)) this.nameOwner.set(n, acc.id); }
   }
   has(userId, msg) { return this.ids.has(userId) || (!!msg && this.names.has(normalize(msg.name))); }
+  /** Tài khoản nào sở hữu user_id/tên này (để tài khoản này không nhận nhầm tin của tài khoản kia). */
+  ownerOf(msg) { return this.idOwner.get(msg.user_id) || this.nameOwner.get(normalize(msg.name)); }
 }
 
 const RATE = /nhanh|chậm|đợi|vui lòng|wait|spam|giới hạn/i;
@@ -46,11 +48,11 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
 }
 
 export class AccountBot {
-  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onPlan = null, onRecord = null, quotaPct = () => null, feed = null, log = () => {}, save = () => {} }) {
+  constructor({ account, getSettings, http, bots, now = () => new Date(), sleep = realSleep, rand = Math.random, stickers = [], memory = new UserMemory(), onLimit = null, onPlan = null, onRecord = null, quotaPct = () => null, feed = null, coordinator = null, log = () => {}, save = () => {} }) {
     this.account = account; this.getSettings = getSettings; this.http = http; this.bots = bots;
     this.now = now; this.nowMs = () => now().getTime(); this.sleep = sleep; this.rand = rand; this.stickers = stickers; this.memory = memory;
     this.log = (text, level = 'info') => log({ t: Date.now(), level, text, acc: account.id });
-    this.saveAcc = save; this.feed = feed; this.draining = false; this.onLimit = onLimit; this.onPlan = onPlan; this.quotaPct = quotaPct;
+    this.saveAcc = save; this.feed = feed; this.coordinator = coordinator; this.draining = false; this.onLimit = onLimit; this.onPlan = onPlan; this.quotaPct = quotaPct;
     this.client = new ChatClient({ http, jar: CookieJar.from(account.cookies) });
     this.pool = new KeyPool(account.keys || [], { onRecord });
     this.health = new ModelHealth({ now: this.nowMs });
@@ -111,7 +113,8 @@ export class AccountBot {
     const a = this.account;
     if (!a.chatUserId && this.sentNorms.size) {
       // So khớp theo dạng đã chuẩn hóa vì web có thể đổi chữ khi hiển thị lại (vd & thành &amp;)
-      const hit = list.find((m) => this.sentNorms.has(squashMsg(m.message)));
+      // Bỏ qua tin đã thuộc về tài khoản khác (hai tài khoản có thể gửi câu giống hệt nhau)
+      const hit = list.find((m) => this.sentNorms.has(squashMsg(m.message)) && (!this.bots.ownerOf(m) || this.bots.ownerOf(m) === a.id));
       if (hit) { a.chatUserId = hit.user_id; if (hit.name) a.displayName = hit.name; this.bots.add(a); this.persist(); }
     }
     if (a.chatUserId) {
@@ -153,7 +156,7 @@ export class AccountBot {
     const allow = this.account.proactive !== false;
     const r = decideReplies({
       messages: list, account: this.account, lastId: this.lastId, bots: this.bots, maxChain: st.maxChain, contextSize: st.contextSize,
-      isActive: (uid) => this.convo.isActive(uid), ownNames: this.ownNames(), sentTexts: this.sentNorms,
+      isActive: (uid) => this.convo.isActive(uid), ownNames: this.ownNames(), sentTexts: this.sentNorms, coordinator: this.coordinator,
       proactive: { chance: allow ? (st.proactiveChance ?? 0) : 0, rand: this.rand, ok: this.#proOk(st), words: st.sensitiveWords || [] },
     });
     this.lastId = r.lastId;

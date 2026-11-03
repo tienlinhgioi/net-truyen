@@ -137,3 +137,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .cat .ico { font-size: 26px; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.08); }
 .cat-t { flex: 1; display: flex; flex-direction: column; gap: 3px; } .cat-t small { color: var(--muted); font-size: 12px; } .cat .chev { font-size: 24px; color: var(--muted); }
 .cat:active { transform: scale(.98); }
+
+/* ===== Nhật ký theo tài khoản ===== */
+.tabs-row { overflow-x: auto; flex-wrap: nowrap; padding: 8px 0 2px; scrollbar-width: none; } .tabs-row::-webkit-scrollbar { display: none; }
+.tabs-row .chip { flex: none; }
+.minilog { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.minilog li { font-size: 12px; padding: 6px 9px; border-radius: 10px; background: rgba(255,255,255,.05); border-left: 3px solid var(--accent); word-break: break-word; }
+.minilog li.warn { border-color: var(--warn); } .minilog li.error { border-color: var(--bad); }
+.minilog li small { color: var(--muted); margin-right: 6px; }

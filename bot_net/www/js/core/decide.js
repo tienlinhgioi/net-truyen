@@ -10,7 +10,7 @@ const plain = (m) => String(m.message || '').replace(IMG, '').trim();
  * @param isActive  (userId) => đang trò chuyện dở với bot không
  * @param proactive {chance, rand, ok, words} chen ngang ngẫu nhiên (ok = còn hạn mức giờ)
  */
-export function decideReplies({ messages, account, lastId, bots, maxChain = 2, contextSize = 6, isActive = () => false, proactive = null, ownNames = [], sentTexts = new Set() }) {
+export function decideReplies({ messages, account, lastId, bots, maxChain = 2, contextSize = 6, isActive = () => false, proactive = null, ownNames = [], sentTexts = new Set(), coordinator = null }) {
   const maxId = messages.reduce((a, m) => Math.max(a, m.id), lastId ?? 0);
   if (lastId === null || lastId === undefined) return { tasks: [], lastId: maxId };
   const mine = new Set([account.displayName, account.name, ...ownNames].map(normalize).filter(Boolean));
@@ -25,16 +25,18 @@ export function decideReplies({ messages, account, lastId, bots, maxChain = 2, c
     const text = plain(m);
     if (!text) return;
     const botMsg = bots.has(m.user_id, m);
-    const mentioned = isMentioned(text, account);
-    const follow = !mentioned && !botMsg && isActive(m.user_id);
-    if (!mentioned && !follow) { if (!botMsg) lastHuman = { m, i, text }; return; }
+    // Nhiều tài khoản cùng phòng: lệnh chung /ai chỉ một tài khoản trả lời, gọi đích danh thì đúng tài khoản đó
+    const mentioned = isMentioned(text, account) && (!coordinator?.allowed || coordinator.allowed(m));
+    const follow = !mentioned && !botMsg && isActive(m.user_id) && (!coordinator?.claim || coordinator.claim(m.id));
+    const addressedElsewhere = !mentioned && coordinator?.addressed?.(m);
+    if (!mentioned && !follow) { if (!botMsg && !addressedElsewhere) lastHuman = { m, i, text }; return; }
     if (!allowedToReply(messages, m.id, bots, maxChain)) return;
     tasks.push({ id: m.id, from: m.name, userId: m.user_id, fromBot: botMsg, kind: mentioned ? 'mention' : 'followup', question: (mentioned ? stripTrigger(text, account) : text) || text, context: ctxOf(i) });
   });
   if (!tasks.length && proactive?.ok && lastHuman && proactive.chance > 0 && proactive.rand() < proactive.chance) {
     const { m, i, text } = lastHuman;
     const recent = messages.slice(-6);
-    if (!sensitiveHit(text, proactive.words || []) && !isQuarrel(recent, proactive.words || [], 3)) {
+    if (!sensitiveHit(text, proactive.words || []) && !isQuarrel(recent, proactive.words || [], 3) && (!coordinator?.claim || coordinator.claim(m.id))) {
       tasks.push({ id: m.id, from: m.name, userId: m.user_id, fromBot: false, kind: 'proactive', question: text, context: ctxOf(i) });
     }
   }

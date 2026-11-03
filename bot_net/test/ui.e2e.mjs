@@ -288,6 +288,29 @@ await p.evaluate(() => window.__chat.push({ id: 900, user_id: 'u9', name: 'Ai đ
 await p.waitForTimeout(600);
 assert.equal(await p.evaluate(() => window.__sent.length), before, 'đã tắt tài khoản thì không trả lời nữa');
 
+// 14) Nhật ký riêng từng tài khoản
+await p.evaluate(() => document.querySelectorAll('.sheet').forEach((x) => x.remove()));
+await p.evaluate(() => {
+  const mg = window.__mgr;
+  mg.accounts.push({ ...JSON.parse(JSON.stringify(mg.accounts[0])), id: 'acc2', displayName: 'Mai', name: 'Mai', enabled: false });
+  mg.emit('accounts');
+  mg.log({ t: Date.now() - 1, level: 'info', text: 'dòng của Tiểu Ly', acc: mg.accounts[0].id });
+  mg.log({ t: Date.now(), level: 'info', text: 'dòng của Mai', acc: 'acc2' });
+});
+assert.deepEqual(await p.locator('#logTabs .chip').allInnerTexts(), ['Tất cả', 'Tiểu Ly', 'Mai']);
+await p.locator('#logTabs .chip[data-acc="acc2"]').click();
+assert.deepEqual(await p.locator('#log li').evaluateAll((els) => els.map((e) => e.dataset.acc)), ['acc2'], 'chỉ thấy nhật ký của Mai');
+await p.locator('#logTabs .chip[data-acc=""]').click();
+assert.ok((await p.locator('#log li').count()) > 1, 'xem tất cả gồm nhật ký của mọi tài khoản');
+await p.locator('#logTabs .chip[data-acc="acc2"]').click();
+await T('#btnClearLog').click();
+assert.equal(await p.locator('#log li').count(), 0);
+await p.locator('#logTabs .chip[data-acc=""]').click();
+assert.ok((await p.locator('#log li').count()) > 0, 'xóa nhật ký của Mai không đụng nhật ký của Tiểu Ly');
+await T('#btnAccounts').click(); await p.locator('.acc').first().locator('.meta').click();
+assert.equal(await p.locator('#accLog li', { hasText: 'dòng của Tiểu Ly' }).count(), 1);
+assert.equal(await p.locator('#accLog li', { hasText: 'dòng của Mai' }).count(), 0, 'nhật ký trong màn tài khoản chỉ của tài khoản đó');
+
 assert.deepEqual(errs, [], 'không có lỗi JS: ' + errs.join('|'));
 console.log('ui e2e: PASS');
 await b.close(); srv.close();

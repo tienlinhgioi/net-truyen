@@ -1,5 +1,5 @@
 // Danh sách tài khoản (bên phải) và màn sửa từng tài khoản.
-import { h, openSheet, avatarEl, switchEl, toast } from './dom.js';
+import { h, openSheet, avatarEl, switchEl, toast, fmtTime } from './dom.js';
 import { comboEditor } from './combo.js';
 import { openScanSheet } from './scan.js';
 import { keyRow } from './keyrow.js';
@@ -135,6 +135,12 @@ export function openEditor(mgr, id) {
         mgr.clearMemory(id); renderMem(); toast('Đã xóa ghi chú cũ, AI bắt đầu lại từ đầu');
       } });
 
+      // ---- Nhật ký riêng của tài khoản này ----
+      const logList = h('ul', { class: 'minilog', id: 'accLog' });
+      const renderAccLog = () => logList.replaceChildren(...mgr.logsOf(id).slice(-40).map((e) => h('li', { class: e.level }, h('small', { text: fmtTime(e.t) }), e.text)));
+      renderAccLog();
+      const offLog = mgr.on((t) => { if (t !== 'log') return; if (!logList.isConnected) { offLog(); return; } renderAccLog(); logList.scrollTop = logList.scrollHeight; });
+
       // ---- Sticker ----
       const packsBox = h('div', { class: 'chips', id: 'packs' });
       const renderPacks = () => {
@@ -174,6 +180,8 @@ export function openEditor(mgr, id) {
         h('div', { class: 'sec' }, h('h3', { text: 'Hành vi' }),
           h('div', { class: 'sw-row' }, h('span', { text: 'Thỉnh thoảng tự chen vào trò chuyện' }), switchEl(a.proactive !== false, (on) => save({ proactive: on }))),
           h('span', { class: 'muted', text: 'Bộ sticker tài khoản này được dùng' }), packsBox),
+        h('div', { class: 'sec' }, h('h3', { text: 'Nhật ký của tài khoản này' }), logList,
+          h('button', { class: 'link', id: 'clearAccLog', text: 'Xóa nhật ký tài khoản này', onclick: () => mgr.clearLogs(id) })),
         h('div', { class: 'sec chat-test' }, h('h3', { text: 'Thử' }), tin, tbtn, ans),
         h('button', { class: 'btn danger', id: 'delAcc', text: 'Xóa tài khoản', onclick: async () => { if (confirm('Xóa tài khoản này khỏi Bot Net?')) { await mgr.removeAccount(id); close(); } } }));
     },
