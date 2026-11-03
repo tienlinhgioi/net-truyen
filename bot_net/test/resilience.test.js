@@ -71,3 +71,13 @@ test('parseDirective: tìm JSON nằm trong đoạn văn, và không gửi đo�
   assert.equal(parseDirective(reasoning).reply, '');
   assert.equal(parseDirective('Chào bạn nhé').reply, 'Chào bạn nhé');
 });
+
+test('generateCombo: khi mọi model đều hết key, lỗi tổng hợp lý do của từng model', async () => {
+  const noq = { error: { code: 429, message: 'q', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] } };
+  const day = { error: { code: 429, message: 'q', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '20' }] }] } };
+  const http = async (r) => ({ status: 429, data: r.url.includes('models/a:') ? noq : day });
+  const e = await generateCombo({ ...base, http, pool: new KeyPool(['A']), health: new ModelHealth(), models: ['a', 'b'] }).catch((x) => x);
+  assert.equal(e.kind, 'nokey');
+  assert.match(e.why, /a: .*không có hạn mức miễn phí/);
+  assert.match(e.why, /b: .*20 lượt/);
+});

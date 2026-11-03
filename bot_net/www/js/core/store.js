@@ -7,7 +7,7 @@ export function defaultSettings() {
     bg: '#0b1020', accent: '#2d6bff', wallpaper: null, wallpaperDim: 0.55,
     chatDelayMs: 2000, keyDelayMs: 1000, hedgeMs: 0, reconnectDelayMs: 10000, pollMs: 1500,
     typingPerCharMs: 40, typingMinMs: 800, typingMaxMs: 4000,
-    proactiveChance: 0.15, proactiveMaxPerHour: 6, convoWindowMs: 180000, starterEnabled: false, starterIdleMs: 20 * 60 * 1000,
+    maxRepliesPerQuestion: 3, proactiveChance: 0.15, proactiveMaxPerHour: 6, convoWindowMs: 180000, starterEnabled: false, starterIdleMs: 20 * 60 * 1000,
     imagePerDay: 5, imageCooldownMs: 60000, moodEnabled: true, avoidRepeat: true,
     sensitiveWords: ['đm', 'địt', 'cặc', 'lồn', 'vcl', 'đéo', 'mẹ mày', 'óc chó', 'cút đi'],
     maxChars: 200, maxChain: 2, contextSize: 6, model: '', blockedWords: [],
@@ -20,7 +20,7 @@ export function defaultSettings() {
 export function defaultAccount() {
   return {
     id: uid(), email: '', password: '', name: '', displayName: '', avatar: '',
-    enabled: false, command: '/ai', aliases: [], keys: [], model: '', combo: { text: [], image: [], vision: [] }, prompt: '', maxChars: 0, proactive: true, stickerPacks: [],
+    enabled: false, command: '/ai', aliases: [], keys: [], model: '', combo: { text: [], image: [], vision: [] }, prompt: '', maxChars: 0, proactive: true, stickerPacks: [], maxReplies: 0,
     chatUserId: null, cookies: {}, stats: { sent: 0, errors: 0, lastAt: 0, days: {} },
   };
 }

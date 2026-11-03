@@ -172,21 +172,24 @@ export async function generateCombo({ models, health, hedgeMs = 0, ...rest }) {
   const attempt = async (model) => { const out = await generate({ ...rest, model }); health?.mark(model, true); return { ...out, model }; };
   const markFail = (model, e) => { if (e.kind === 'model') health?.mark(model, false); else if (e.kind === 'server') health?.mark(model, false, 45000); };
   const fatal = (e) => !['model', 'server', 'nokey', 'blocked'].includes(e.kind);
-  const none = (nokey) => nokey || err('nomodel', { detail: models.length ? 'Tất cả model trong combo đều không dùng được' : 'Chưa chọn model' });
+  const whys = [];
+  const noteWhy = (model, e) => { if (e.kind === 'nokey') whys.push({ model, why: e.why || 'không có key khả dụng', retryAt: e.retryAt }); };
+  // Hết key ở mọi model: lỗi tổng hợp lý do của từng model (vd "gemini-x: không có hạn mức miễn phí; gemini-y: hết hạn mức theo ngày (20 lượt)")
+  const none = () => whys.length
+    ? err('nokey', { retryAt: Math.min(...whys.map((w) => w.retryAt ?? Infinity)), why: whys.slice(0, 4).map((w) => `${w.model}: ${w.why}`).join('; ') })
+    : err('nomodel', { detail: models.length ? 'Tất cả model trong combo đều không dùng được' : 'Chưa chọn model' });
 
   if (!hedgeMs || list.length < 2) {
-    let nokey = null;
     for (const model of list) {
       try { return await attempt(model); } catch (e) {
         if (fatal(e)) throw e;
-        markFail(model, e);
-        if (e.kind === 'nokey') nokey = e;
+        markFail(model, e); noteWhy(model, e);
       }
     }
-    throw none(nokey);
+    throw none();
   }
   return new Promise((resolve, reject) => {
-    let next = 0, active = 0, finished = false, nokey = null;
+    let next = 0, active = 0, finished = false;
     const timers = [];
     const finish = (fn, v) => { if (finished) return; finished = true; timers.forEach(clearTimeout); fn(v); };
     const launch = () => {
@@ -197,10 +200,9 @@ export async function generateCombo({ models, health, hedgeMs = 0, ...rest }) {
       attempt(model).then((r) => finish(resolve, r)).catch((e) => {
         active--;
         if (fatal(e)) return finish(reject, e);
-        markFail(model, e);
-        if (e.kind === 'nokey') nokey = e;
+        markFail(model, e); noteWhy(model, e);
         if (active === 0 && next < list.length) launch();
-        if (!finished && active === 0 && next >= list.length) finish(reject, none(nokey));
+        if (!finished && active === 0 && next >= list.length) finish(reject, none());
       });
     };
     launch();
@@ -208,9 +210,9 @@ export async function generateCombo({ models, health, hedgeMs = 0, ...rest }) {
 }
 
 /** Kiểm tra một model còn sống không (gửi một yêu cầu cực nhỏ), kèm độ trễ. */
-export async function checkModel(http, key, model, now = () => Date.now()) {
+export async function checkModel(http, key, model, now = () => Date.now(), { image = false } = {}) {
   const t0 = now();
-  const res = await callModel(http, { model, key, system: '', context: [], question: 'ping', maxOutputTokens: 8 });
+  const res = await callModel(http, { model, key, system: '', context: [], question: image ? 'một chấm tròn nhỏ màu đỏ' : 'ping', maxOutputTokens: 8, image });
   const ms = now() - t0;
   if (res.status === 200) return { alive: true, state: 'ok', ms };
   const state = classifyError(res.status, res.data);

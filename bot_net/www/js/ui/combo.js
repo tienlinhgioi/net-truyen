@@ -47,11 +47,14 @@ export function comboEditor(mgr, { combo, keys, onChange }) {
       render();
     } }));
     root.append(h('button', { class: 'btn ghost', id: 'comboCheck', text: 'Kiểm tra model sống', onclick: async (e) => {
-      const all = ROLES.flatMap(([r]) => combo[r] || []);
-      if (!all.length) return toast('Chưa có model nào trong combo');
+      const imgs = combo.image || [];
+      const textual = ROLES.filter(([r]) => r !== 'image').flatMap(([r]) => combo[r] || []);
+      let all = [...textual];
+      if (imgs.length && confirm('Kiểm tra model ảnh sẽ thử tạo một ảnh nhỏ (có thể tốn 1 lượt tạo ảnh nếu model có hạn mức). Có kiểm tra model ảnh không?')) all = [...all, ...imgs];
+      if (!all.length) return toast('Chưa có model nào để kiểm tra');
       if (!keys().length) return toast('Chưa có API key để kiểm tra');
       e.target.disabled = true; e.target.textContent = 'Đang kiểm tra...';
-      try { await mgr.checkModels(keys(), all); } catch (err) { toast(err.message); }
+      try { await mgr.checkModels(keys(), all, imgs); } catch (err) { toast(err.message); }
       render();
     } }));
   };

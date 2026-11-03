@@ -265,7 +265,12 @@ export class AccountBot {
     const reply = limitChars(replaceSelf(cleanReply(d.reply, { account: a, names }), a), a.maxChars || st.maxChars);
     if (!reply && !d.sticker && !d.draw && !d.manga) { this.log('Gemini không trả nội dung, bỏ qua', 'warn'); return 'drop'; }
 
-    const parts = reply ? splitReply(reply) : [];
+    // Giới hạn số tin trả lời cho MỘT câu hỏi (tin chữ trước, rồi truyện, ảnh, sticker)
+    let budget = a.maxReplies || st.maxRepliesPerQuestion || 3;
+    const all = reply ? splitReply(reply) : [];
+    const parts = all.slice(0, budget);
+    budget -= parts.length;
+    let dropped = all.length - parts.length;
     let first = true;
     for (const part of parts) {
       await this.#waitToSend(part.length, first ? t0 : this.nowMs(), st);
@@ -276,9 +281,12 @@ export class AccountBot {
     if (task.kind === 'proactive' || task.kind === 'starter') { this.proTimes.push(this.nowMs()); this.#bump('proactive'); }
     if (reply) { this.recent = [...this.recent, reply].slice(-6); }
 
-    if (d.sticker) await this.#sendSticker(st);
-    if (d.manga) await this.#sendManga(d.manga, st);
-    if (d.draw) await this.#sendImage(d.draw, st);
+    for (const [wanted, run] of [[d.manga, () => this.#sendManga(d.manga, st)], [d.draw, () => this.#sendImage(d.draw, st)], [d.sticker, () => this.#sendSticker(st)]]) {
+      if (!wanted) continue;
+      if (budget <= 0) { dropped++; continue; }
+      if (await run()) budget--;
+    }
+    if (dropped > 0) this.log(`Đã đạt giới hạn số tin trả lời cho một câu hỏi, bỏ bớt ${dropped} tin`, 'warn');
     if (d.remember && task.userId) this.memory.add(task.userId, task.from, d.remember);
     if (task.userId) this.convo.touch(task.userId, task.from, task.question, reply);
     if (task.fromBot) this.botReplyAt.set(task.userId || task.from, this.nowMs());
@@ -287,33 +295,39 @@ export class AccountBot {
 
   async #sendSticker(st) {
     const url = pickSticker(this.stickers, this.account.stickerPacks || [], this.rand);
-    if (!url) return;
+    if (!url) return false;
     await this.#waitToSend(8, this.nowMs(), st);
-    if (await this.#send(`[IMG=${url}]`, st)) this.#bump('stickers');
+    if (await this.#send(`[IMG=${url}]`, st)) { this.#bump('stickers'); return true; }
+    return false;
   }
 
   async #sendManga(name, st) {
     let found;
     try { found = (await this.client.searchManga(name))[0]; } catch { found = null; }
-    if (!found) { this.log(`Không tìm thấy truyện "${name}"`, 'warn'); return; }
+    if (!found) { this.log(`Không tìm thấy truyện "${name}"`, 'warn'); return false; }
     await this.#waitToSend(8, this.nowMs(), st);
-    if (await this.#send(`[MANGA=${found.slug}]`, st)) this.#bump('mangas');
+    if (await this.#send(`[MANGA=${found.slug}]`, st)) { this.#bump('mangas'); return true; }
+    return false;
   }
 
   async #sendImage(prompt, st) {
     const quota = new ImageQuota({ perDay: st.imagePerDay ?? 5, cooldownMs: st.imageCooldownMs ?? 60000, now: this.nowMs });
     const q = quota.check(this.stats);
-    if (!q.ok) { this.log(q.reason === 'daily' ? 'Đã đạt giới hạn số ảnh tạo mỗi ngày' : 'Đang chờ giữa hai lần tạo ảnh (giới hạn)', 'warn'); return; }
+    if (!q.ok) { this.log(q.reason === 'daily' ? 'Đã đạt giới hạn số ảnh tạo mỗi ngày' : 'Đang chờ giữa hai lần tạo ảnh (giới hạn)', 'warn'); return false; }
     const models = comboFor(this.account, st, 'image');
-    if (!models.length) { this.log('Chưa chọn model tạo ảnh trong combo', 'warn'); return; }
+    if (!models.length) { this.log('Chưa chọn model tạo ảnh trong combo', 'warn'); return false; }
     this.log(`Đang tạo ảnh: ${prompt}`);
     try {
       const out = await generateCombo({ http: this.http, pool: this.pool, health: this.health, models, system: '', context: [], question: prompt, mode: 'image', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, onPlan: this.onPlan });
       const url = await this.client.uploadImage(out.image.data, out.image.mime);
       quota.record(this.stats);
       await this.#waitToSend(8, this.nowMs(), st);
-      if (await this.#send(`[IMG=${url}]`, st)) this.#bump('images');
-    } catch (e) { this.log(`Không tạo/gửi được ảnh: ${e.kind === 'nomodel' ? 'không có model tạo ảnh dùng được' : (e.message || e.kind)}`, 'error'); }
+      if (await this.#send(`[IMG=${url}]`, st)) { this.#bump('images'); return true; }
+    } catch (e) {
+      const why = e.kind === 'nokey' ? (e.why || 'không có key khả dụng cho model ảnh') : e.kind === 'nomodel' ? 'không có model tạo ảnh dùng được' : (e.detail || e.message || e.kind);
+      this.log(`Không tạo/gửi được ảnh: ${why}`, 'error');
+    }
+    return false;
   }
 
   async start() {

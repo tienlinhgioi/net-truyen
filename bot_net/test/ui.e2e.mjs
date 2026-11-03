@@ -164,8 +164,12 @@ await p.waitForFunction(() => window.__sent.length > 1, null, { timeout: 15000 }
 await p.waitForTimeout(500);
 await p.reload(); await p.waitForSelector('#stage');
 assert.match(await T('#runInfo').innerText(), /1 tài khoản đang chạy/, 'tài khoản tự chạy lại sau khi mở app');
+const back = () => p.locator('.sheet .back').last().click();
 await T('#btnSettings').click();
+// Cài đặt tách thành 4 màn riêng
+assert.deepEqual(await p.locator('.cat').evaluateAll((els) => els.map((e) => e.id)), ['catAppearance', 'catModels', 'catBehavior', 'catSystem']);
 await shot('6-settings');
+await T('#catAppearance').click();
 await T('#setBg').evaluate((el) => { el.value = '#102030'; el.dispatchEvent(new Event('input', { bubbles: true })); });
 assert.equal(await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()), '#102030');
 const svc0 = await p.evaluate(() => ({ ...window.__svc }));
@@ -174,12 +178,19 @@ for (const v of ['0.05', '0.2', '0.4']) await T('#setPanel').evaluate((el, x) =>
 assert.equal(await p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--pa').trim()), '0.4');
 assert.deepEqual(await p.evaluate(() => ({ ...window.__svc })), svc0, 'kéo thanh trượt không được gọi lại dịch vụ nền');
 assert.equal(await T('#setDim').isDisabled(), true, 'chưa có hình nền thì thanh độ tối bị khóa kèm chú thích');
+assert.equal(await p.locator('#setChatDelay').count(), 0, 'màn Giao diện không chứa cài đặt delay');
+await back();
+await T('#catBehavior').click();
 await T('#setChatDelay').fill('7'); await T('#setChatDelay').blur();
 await T('#setMax').fill('90'); await T('#setMax').blur();
 await T('#setBlocked').fill('tục\nxấu'); await T('#setBlocked').blur();
+await T('#setMaxReplies').fill('2'); await T('#setMaxReplies').blur();
 const st = await p.evaluate(() => window.__mgr.settings);
+assert.equal(st.maxRepliesPerQuestion, 2);
 assert.equal(st.chatDelayMs, 7000); assert.equal(st.maxChars, 90); assert.deepEqual(st.blockedWords, ['tục', 'xấu']);
 
+await back();
+await T('#catModels').click();
 await T('#checkAllAcc').click();
 await p.waitForSelector('#allKeys .badge.ok');
 // kết quả ở Cài đặt phải GIỐNG HỆT màn Tài khoản (cùng cách kiểm tra)
@@ -193,11 +204,14 @@ await p.locator('#allKeys').evaluate(() => {});
 await T('#checkAllAcc').click(); await p.waitForFunction(() => document.querySelector('#checkAllAcc').textContent.includes('Kiểm tra đồng loạt'));
 assert.match(await p.locator('#allKeys .keyblock').first().locator('.quota').innerText(), /\/200 lượt/);
 await p.locator('#allKeys').scrollIntoViewIfNeeded(); await shot('7-keys');
+await back();
+await T('#catSystem').click();
 await T('#openReport').click();
 await p.waitForSelector('.rep');
-await p.locator('.sheet .back').last().click();
+await back();
+await back();
+await back();
 // 8b) Dừng tất cả rồi bật lại
-await p.locator('.sheet .back').last().click();
 await T('#btnPause').click();
 assert.equal(await p.evaluate(() => window.__mgr.runningAccounts().length), 0);
 await T('#btnPause').click();
@@ -222,6 +236,9 @@ assert.match(await p.locator('.scan-row[data-model="gemini-pro"] .badge').innerT
 await T('#scanApply').click();
 await p.waitForTimeout(300);
 assert.deepEqual([...(await p.evaluate(() => window.__mgr.accounts[0].combo.text))].sort(), ['gemini-fast', 'gemini-quick']);
+// 12a) Giới hạn số tin trả lời riêng của tài khoản
+await T('#fMaxReplies').fill('1'); await T('#fMaxReplies').blur();
+assert.equal(await p.evaluate(() => window.__mgr.accounts[0].maxReplies), 1);
 // 12) Dán nhiều key một lần + kiểm tra tình trạng tất cả model
 await T('#keyBulk').fill('AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1, AIzaSyBBBBBBBBBBBBBBBBBBBBBBBBBBBBB2\nrác ngắn');
 await T('#keyBulkAdd').click();

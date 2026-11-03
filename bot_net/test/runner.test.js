@@ -315,3 +315,48 @@ test('TẮT tài khoản: tin xếp hàng chưa gửi bị hủy, tick sau khi t
   assert.deepEqual(t.sent, []);
   assert.equal(t.logs.some((l) => /Đã trả lời/.test(l.text)), false);
 });
+
+const twoParts = () => json({ reply: 'đoạn một\n\nđoạn hai', sticker: true });
+const stk = { account: { stickerPacks: ['p1'] }, stickers: [{ id: 'p1', urls: ['https://s/1.png'] }] };
+
+test('giới hạn số tin trả lời cho một câu hỏi: tin chữ được ưu tiên, phần dư bị bỏ', async () => {
+  const t = setup(mention({ ...stk, gemini: twoParts, settings: { maxRepliesPerQuestion: 2 } }));
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['đoạn một', 'đoạn hai'], 'giới hạn 2 tin: không gửi thêm sticker');
+  assert.ok(t.logs.some((l) => /giới hạn số tin/i.test(l.text)));
+});
+
+test('giới hạn 1 tin: chỉ gửi đoạn chữ đầu', async () => {
+  const t = setup(mention({ ...stk, gemini: twoParts, settings: { maxRepliesPerQuestion: 1 } }));
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['đoạn một']);
+});
+
+test('giới hạn 3 tin: đủ hai đoạn chữ và một sticker', async () => {
+  const t = setup(mention({ ...stk, gemini: twoParts, settings: { maxRepliesPerQuestion: 3 } }));
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['đoạn một', 'đoạn hai', '[IMG=https://s/1.png]']);
+});
+
+test('giới hạn riêng của tài khoản ghi đè giới hạn chung', async () => {
+  const t = setup(mention({ ...stk, gemini: twoParts, settings: { maxRepliesPerQuestion: 5 }, account: { ...stk.account, maxReplies: 1 } }));
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['đoạn một']);
+});
+
+test('chỉ có sticker (không có chữ) vẫn gửi được với giới hạn 1', async () => {
+  const t = setup(mention({ ...stk, gemini: () => json({ reply: '', sticker: true }), settings: { maxRepliesPerQuestion: 1 } }));
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['[IMG=https://s/1.png]']);
+});
+
+test('lỗi ảnh nêu rõ lý do thật (model ảnh không có hạn mức miễn phí), không in chữ "nokey"', async () => {
+  const noq = { error: { code: 429, message: 'q', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }, { retryDelay: '78958s' }] } };
+  const gemini = (r) => (r.data.generationConfig?.responseModalities ? { status: 429, data: noq } : json({ reply: 'để mình vẽ', draw: 'mèo' }));
+  const t = setup(mention({ gemini, account: { combo: { text: [], image: ['img-a', 'img-b'], vision: [] } } }));
+  await twoTicks(t);
+  const msg = t.logs.map((l) => l.text).find((x) => /ảnh/i.test(x) && /Không tạo/.test(x)) || '';
+  assert.match(msg, /không có hạn mức miễn phí/);
+  assert.match(msg, /img-a/);
+  assert.doesNotMatch(msg, /nokey/);
+});

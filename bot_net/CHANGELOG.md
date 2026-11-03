@@ -1,5 +1,11 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.9
+- Giới hạn số tin trả lời cho một câu hỏi (mặc định 3, chỉnh chung trong Cài đặt hoặc riêng từng tài khoản): tin chữ được ưu tiên, rồi truyện, ảnh, sticker; phần vượt giới hạn bị bỏ và ghi vào nhật ký.
+- Cài đặt tách thành 4 màn riêng: Giao diện; Model và API key; Hành vi và tốc độ; Lịch và hệ thống.
+- Sửa thông báo lỗi ảnh "nokey" khó hiểu: nay nêu đúng lý do từng model ảnh, ví dụ "gemini-2.5-flash-image: model này không có hạn mức miễn phí với key này (cần bật thanh toán hoặc đổi model)". Qua thử với key thật: cả 8 model tạo ảnh đều không có hạn mức ở gói miễn phí.
+- "Kiểm tra model sống" cho model ảnh gửi yêu cầu tạo ảnh thật (có hỏi xác nhận vì có thể tốn lượt) thay vì yêu cầu chữ, nên cho kết quả đúng.
+
 ## 1.0.8
 - Sửa lỗi tự đối đáp một mình: bot nhận ra tin của chính nó chắc chắn hơn. Khớp tin vừa gửi theo dạng đã chuẩn hóa (web có thể đổi chữ khi hiển thị lại như & thành &amp;), dùng nhiều tên (tên hồ sơ, tên trong chat, tên trong cookie đăng nhập), và không bao giờ trả lời một tin trùng chữ với tin mình vừa gửi, kể cả khi chưa biết user_id.
 - Câu trả lời không còn tự gọi tên mình: thay tên và biệt danh của chính mình bằng "mình", bỏ lệnh gọi, bỏ tiền tố "Tên:" và bỏ phần model tự viết lời người khác. Lịch sử chat gửi cho model ghi rõ dòng nào là của chính bot ("Bạn (tên)") và dặn không giả lời người khác.

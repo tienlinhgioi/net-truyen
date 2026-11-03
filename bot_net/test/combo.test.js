@@ -105,3 +105,12 @@ test('rankModels: chỉ giữ model sống, nhanh nhất lên đầu, tối đa 
   assert.deepEqual(rankModels(res), ['c', 'g', 'a']);
   assert.deepEqual(rankModels([{ model: 'x', state: 'quota', ms: 1 }]), []);
 });
+
+test('checkModel chế độ ảnh: gửi yêu cầu tạo ảnh thật, 200 = sống, 429 không hạn mức = chết', async () => {
+  const seen = [];
+  const live = await checkModel(async (r) => { seen.push(r.data.generationConfig.responseModalities); return { status: 200, data: { candidates: [{ content: { parts: [{ inlineData: { data: 'x', mimeType: 'image/png' } }] } }] } }; }, 'K', 'img', () => 0, { image: true });
+  assert.deepEqual(seen, [['TEXT', 'IMAGE']]);
+  assert.equal(live.state, 'ok');
+  const noq = { error: { details: [{ violations: [{ quotaId: 'X-FreeTier' }] }] } };
+  assert.equal((await checkModel(async () => ({ status: 429, data: noq }), 'K', 'img', () => 0, { image: true })).state, 'noquota');
+});

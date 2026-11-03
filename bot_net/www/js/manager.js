@@ -297,12 +297,12 @@ export class Manager {
   }
 
   /** Kiểm tra model nào còn sống (dùng key khả dụng đầu tiên). */
-  async checkModels(keys, models) {
+  async checkModels(keys, models, imageModels = []) {
     const key = keys[0];
     if (!key) throw new Error('Chưa có API key');
     const out = {};
     await Promise.all([...new Set(models)].map(async (m) => {
-      try { out[m] = await checkModel(this.http, key, m); } catch { out[m] = { alive: false, state: 'error', ms: 0 }; }
+      try { out[m] = await checkModel(this.http, key, m, undefined, { image: imageModels.includes(m) }); } catch { out[m] = { alive: false, state: 'error', ms: 0 }; }
       this.modelStatus[m] = { ...out[m], at: Date.now() };
     }));
     this.emit('models');

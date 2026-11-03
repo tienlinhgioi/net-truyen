@@ -109,6 +109,7 @@ export function openEditor(mgr, id) {
       const al = h('input', { type: 'text', value: a.aliases.join(', '), id: 'fAlias', placeholder: 'ví dụ: ly, bé ly, cô ly', onchange: (e) => save({ aliases: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) }) });
       const pr = h('textarea', { id: 'fPrompt', placeholder: 'Sơ yếu lý lịch, tính cách, cách xưng hô, sở thích... của tài khoản này', onchange: (e) => save({ prompt: e.target.value }) });
       pr.value = a.prompt;
+      const mr = h('input', { type: 'number', min: 0, max: 8, value: a.maxReplies || 0, id: 'fMaxReplies', onchange: (e) => save({ maxReplies: Math.min(8, Math.max(0, Number(e.target.value) || 0)) }) });
       const mx = h('input', { type: 'number', min: 0, value: a.maxChars, id: 'fMax', onchange: (e) => save({ maxChars: Math.max(0, Number(e.target.value) || 0) }) });
 
       // ---- Sticker ----
@@ -144,7 +145,7 @@ export function openEditor(mgr, id) {
         h('div', { class: 'sec' }, h('h3', { text: 'Combo model' }), combo),
         h('div', { class: 'sec' }, h('h3', { text: 'Nhận diện' }),
           field('Lệnh gọi (đặt ở đầu hoặc trong tin nhắn)', cmd), field('Tên gọi', nm), field('Tên gọi khác, ghi chú tìm kiếm thông minh (cách nhau dấu phẩy)', al)),
-        h('div', { class: 'sec' }, h('h3', { text: 'Hồ sơ và prompt' }), pr, field('Giới hạn ký tự trả lời (0 = theo cài đặt chung)', mx)),
+        h('div', { class: 'sec' }, h('h3', { text: 'Hồ sơ và prompt' }), pr, field('Giới hạn ký tự trả lời (0 = theo cài đặt chung)', mx), field('Số tin trả lời tối đa cho một câu hỏi (0 = theo cài đặt chung)', mr)),
         h('div', { class: 'sec' }, h('h3', { text: 'Hành vi' }),
           h('div', { class: 'sw-row' }, h('span', { text: 'Thỉnh thoảng tự chen vào trò chuyện' }), switchEl(a.proactive !== false, (on) => save({ proactive: on }))),
           h('span', { class: 'muted', text: 'Bộ sticker tài khoản này được dùng' }), packsBox),
