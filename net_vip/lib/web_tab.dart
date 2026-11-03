@@ -4,21 +4,30 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'auth_sync.dart';
+import 'guest_redirect.dart';
 import 'injector.dart';
 import 'theme.dart';
 import 'url_policy.dart';
 import 'widgets/error_view.dart';
 
 class WebTab extends StatefulWidget {
-  const WebTab({super.key, required this.initialUrl, required this.sync});
+  const WebTab({
+    super.key,
+    required this.initialUrl,
+    required this.sync,
+    this.needsAuth = false,
+  });
   final String initialUrl;
   final AuthSync sync;
 
+  /// Tab chỉ có nội dung khi đã đăng nhập (Tài khoản, Theo dõi).
+  final bool needsAuth;
+
   @override
-  State<WebTab> createState() => _WebTabState();
+  State<WebTab> createState() => WebTabState();
 }
 
-class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
+class WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
   late final WebViewController _c;
   int _progress = 0;
   String? _error;
@@ -66,6 +75,9 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
     _load();
   }
 
+  /// Mở một địa chỉ trong tab này (dùng cho menu Cộng đồng).
+  Future<void> load(String url) => _c.loadRequest(Uri.parse(url));
+
   Future<void> _load() => _c.loadRequest(Uri.parse(widget.initialUrl));
 
   void _onMessage(JavaScriptMessage m) {
@@ -74,13 +86,26 @@ class _WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
       _c.reload();
     } else if (t.startsWith('auth:')) {
       _loadedAuth = t.substring(5);
+      final login = widget.needsAuth
+          ? guestRedirect(
+              current: _current, initialUrl: widget.initialUrl, auth: _loadedAuth)
+          : null;
+      if (login != null) {
+        _c.loadRequest(Uri.parse(login));
+      }
       widget.sync.report(_loadedAuth!);
     }
   }
 
   // Đăng nhập/đăng xuất ở tab khác: tải lại tab này cho đồng bộ.
   void _onAuthChanged() {
-    if (_loadedAuth != null && _loadedAuth != widget.sync.state) _c.reload();
+    if (_loadedAuth == null || _loadedAuth == widget.sync.state) return;
+    // Tab cần đăng nhập đang kẹt ở trang chủ/đăng nhập: tải lại đúng trang đích.
+    if (widget.needsAuth) {
+      _c.loadRequest(Uri.parse(widget.initialUrl));
+    } else {
+      _c.reload();
+    }
   }
 
   Future<String> _asset(String n) => rootBundle.loadString('assets/inject/$n');

@@ -19,7 +19,19 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      - name: Giải mã khóa ký (nếu có secret)
+        env:
+          KEYSTORE_B64: ${{ secrets.NETVIP_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/netvip.jks"
+            echo "NETVIP_KEYSTORE=$RUNNER_TEMP/netvip.jks" >> "$GITHUB_ENV"
+          fi
       - run: flutter build apk --release --split-per-abi
+        env:
+          NETVIP_STORE_PASSWORD: ${{ secrets.NETVIP_STORE_PASSWORD }}
+          NETVIP_KEY_ALIAS: ${{ secrets.NETVIP_KEY_ALIAS }}
+          NETVIP_KEY_PASSWORD: ${{ secrets.NETVIP_KEY_PASSWORD }}
       - uses: actions/upload-artifact@v4
         with:
           name: net-vip-1.0.0

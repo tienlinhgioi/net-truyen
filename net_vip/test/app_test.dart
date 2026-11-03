@@ -5,6 +5,7 @@ import 'package:net_vip/shell.dart';
 import 'package:net_vip/url_policy.dart';
 import 'package:net_vip/injector.dart';
 import 'package:net_vip/auth_sync.dart';
+import 'package:net_vip/guest_redirect.dart';
 import 'package:net_vip/widgets/error_view.dart';
 
 void main() {
@@ -29,12 +30,12 @@ void main() {
       created++;
       return Text(u);
     })));
-    expect(find.byType(NavigationDestination), findsNWidgets(5));
+    expect(find.byType(NavigationDestination), findsNWidgets(6));
     await t.tap(find.text('Chat'));
     await t.pump();
     await t.tap(find.text('Trang chủ'));
     await t.pump();
-    expect(created, 5);
+    expect(created, 6);
   });
 
   test('url policy', () {
@@ -69,5 +70,33 @@ void main() {
         contains('chat.js'));
     expect(assetsForUrl(Uri.parse('https://nettruyen15s.com/')).js,
         ['base.js']);
+  });
+
+  test('guestRedirect: khách vào tab cần đăng nhập bị đẩy về trang chủ -> sang trang đăng nhập', () {
+    final r = guestRedirect(
+        current: Uri.parse('https://nettruyen15s.com/'),
+        initialUrl: 'https://nettruyen15s.com/user/profile',
+        auth: 'out');
+    expect(r, 'https://nettruyen15s.com/auth/login?return=https%3A%2F%2Fnettruyen15s.com%2Fuser%2Fprofile');
+    expect(
+        guestRedirect(
+            current: Uri.parse('https://nettruyen15s.com/'),
+            initialUrl: 'https://nettruyen15s.com/user/profile',
+            auth: '42'),
+        isNull);
+    expect(
+        guestRedirect(
+            current: Uri.parse('https://nettruyen15s.com/'),
+            initialUrl: 'https://nettruyen15s.com/',
+            auth: 'out'),
+        isNull);
+  });
+
+  testWidgets('bấm Cộng đồng mở menu Diễn đàn và BXH thành viên', (t) async {
+    await t.pumpWidget(MaterialApp(home: NetVipShell(buildTab: (u) => Text(u))));
+    await t.tap(find.text('Cộng đồng'));
+    await t.pumpAndSettle();
+    expect(find.text('Diễn đàn'), findsOneWidget);
+    expect(find.text('Bảng xếp hạng thành viên'), findsOneWidget);
   });
 }

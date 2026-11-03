@@ -29,11 +29,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // Khóa ký cố định (từ GitHub Secrets qua biến môi trường) để cài đè được giữa các bản.
+    // Không có biến môi trường (build trên máy) thì ký bằng khóa debug.
+    val keystorePath = System.getenv("NETVIP_KEYSTORE")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("NETVIP_STORE_PASSWORD")
+                keyAlias = System.getenv("NETVIP_KEY_ALIAS")
+                keyPassword = System.getenv("NETVIP_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (keystorePath != null) "release" else "debug")
         }
     }
 }
