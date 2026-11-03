@@ -22,7 +22,7 @@ export function defaultAccount() {
 
 /** Lưu bằng bộ nhớ trừu tượng {get(key), set(key, value)} (Capacitor Preferences hoặc localStorage). */
 export class Store {
-  constructor(adapter) { this.adapter = adapter; this.settings = defaultSettings(); this.accounts = []; }
+  constructor(adapter) { this.adapter = adapter; this.settings = defaultSettings(); this.accounts = []; this.usage = {}; }
 
   async load() {
     const raw = await this.adapter.get('botnet');
@@ -30,6 +30,7 @@ export class Store {
       const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
       this.settings = { ...defaultSettings(), ...d.settings, schedule: { ...defaultSettings().schedule, ...(d.settings?.schedule || {}) } };
       this.accounts = (d.accounts || []).map((a) => ({ ...defaultAccount(), ...a }));
+      this.usage = d.usage || {};
     }
     return this;
   }

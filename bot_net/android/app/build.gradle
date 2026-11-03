@@ -8,7 +8,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +16,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Khóa ký cố định lấy từ biến môi trường (GitHub Secrets). Không có thì ký bằng khóa debug.
+    def ksPath = System.getenv("NETVIP_KEYSTORE")
+    signingConfigs {
+        if (ksPath != null) {
+            release {
+                storeFile file(ksPath)
+                storePassword System.getenv("NETVIP_STORE_PASSWORD")
+                keyAlias System.getenv("NETVIP_KEY_ALIAS")
+                keyPassword System.getenv("NETVIP_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig ksPath != null ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

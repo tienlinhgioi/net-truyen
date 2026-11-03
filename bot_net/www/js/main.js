@@ -1,0 +1,63 @@
+import { http, storage, service, isNative } from './platform.js';
+import { Manager } from './manager.js';
+import { h, avatarEl, fmtTime, initials } from './ui/dom.js';
+import { openAccounts } from './ui/accounts.js';
+import { openSettings } from './ui/settings.js';
+
+const mock = window.__BOTNET_TEST__; // dùng khi chạy test giao diện
+const mgr = await new Manager({
+  adapter: mock?.adapter || storage, http: mock?.http || http, service: mock ? null : (isNative() ? service : null), sleep: mock?.sleep,
+}).init();
+window.__mgr = mgr;
+
+function applyTheme() {
+  const s = mgr.settings, r = document.documentElement.style;
+  r.setProperty('--bg', s.bg); r.setProperty('--accent', s.accent); r.setProperty('--dim', s.wallpaperDim);
+  const wall = document.getElementById('wall');
+  wall.style.backgroundImage = s.wallpaper ? `url(${s.wallpaper})` : '';
+  document.body.classList.toggle('has-wall', !!s.wallpaper);
+  document.querySelector('meta[name=theme-color]').content = s.bg;
+}
+
+function renderStage() {
+  const stage = document.getElementById('stage');
+  const run = mgr.runningAccounts();
+  stage.replaceChildren();
+  if (!run.length) stage.append(h('div', { class: 'empty', text: 'Chưa có tài khoản nào chạy. Mở quản lý tài khoản (góc phải) và bật một tài khoản.' }));
+  for (const a of run) {
+    const ring = h('div', { class: 'ring', 'data-id': a.id }, a.avatar ? h('img', { src: a.avatar, alt: '' }) : h('div', { class: 'ph', text: initials(a.displayName || a.name) }));
+    stage.append(h('div', { class: 'bubble' }, ring, h('div', { class: 'nm', text: a.displayName || a.name }), h('div', { class: 'st', text: `Đã gửi ${a.stats?.sent || 0}` })));
+  }
+  document.getElementById('runInfo').textContent = run.length ? `${run.length} tài khoản đang chạy` : 'Chưa có tài khoản chạy';
+  const first = run[0] || mgr.accounts[0];
+  const who = document.getElementById('btnAccounts');
+  who.classList.toggle('has-img', !!first?.avatar); who.classList.toggle('no-img', !first?.avatar);
+  document.getElementById('whoImg').src = first?.avatar || '';
+  document.getElementById('whoName').textContent = first ? (first.displayName || first.name).split(' ').slice(-1)[0] : 'TK';
+}
+
+function addLog(e) {
+  const ul = document.getElementById('log');
+  if (!e) { ul.replaceChildren(); return; }
+  const acc = mgr.account(e.acc);
+  ul.append(h('li', { class: e.level }, h('small', { text: `${fmtTime(e.t)} · ${acc?.displayName || acc?.name || ''}` }), e.text));
+  while (ul.children.length > 120) ul.firstChild.remove();
+  ul.scrollTop = ul.scrollHeight;
+}
+
+mgr.on((type, data) => {
+  if (type === 'log') {
+    addLog(data);
+    const ring = document.querySelector(`.ring[data-id="${data?.acc}"]`);
+    if (ring && /Đã trả lời/.test(data.text)) { ring.classList.add('busy'); setTimeout(() => ring.classList.remove('busy'), 1500); }
+  } else if (type === 'accounts' || type === 'account') renderStage();
+});
+
+document.getElementById('btnSettings').onclick = () => openSettings(mgr, applyTheme);
+document.getElementById('btnAccounts').onclick = () => openAccounts(mgr);
+document.getElementById('btnClearLog').onclick = () => mgr.clearLogs();
+applyTheme(); renderStage(); mgr.logs.forEach(addLog);
+
+// Lưu ngay khi app bị ẩn/đóng để không mất thay đổi.
+addEventListener('pagehide', () => mgr.saveNow());
+document.addEventListener('visibilitychange', () => { if (document.hidden) mgr.saveNow(); });
