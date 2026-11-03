@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b1020">
+  <title>Bot Net</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="wall"></div><div id="dim"></div>
+  <div id="app">
+    <header class="top">
+      <button id="btnSettings" class="round" aria-label="Cài đặt">⚙</button>
+      <div class="brand"><b>Bot Net</b><small id="runInfo">Chưa có tài khoản chạy</small></div>
+      <button id="btnAccounts" class="round who" aria-label="Quản lý tài khoản"><img id="whoImg" alt=""><span id="whoName">TK</span></button>
+    </header>
+    <main>
+      <div class="stage-actions"><button id="btnReport" class="pill">📊 Báo cáo</button><button id="btnPause" class="pill danger">⏸ Dừng tất cả</button></div>
+      <section id="stage" aria-label="Tài khoản đang chạy"></section>
+      <section class="card feed">
+        <div class="row between"><h2>Nhật ký</h2><button id="btnClearLog" class="link">Xóa</button></div>
+        <div id="logTabs" class="chips tabs-row" role="tablist" aria-label="Nhật ký theo tài khoản"></div>
+        <ul id="log"></ul>
+      </section>
+    </main>
+  </div>
+  <div id="sheets"></div>
+  <div id="toast" role="status"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+name: Bot Net APK
+on:
+  push:
+    branches: [bot-net]
+    paths: ['bot_net/**', '.github/workflows/bot-net.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bot_net
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: bot_net/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - run: npx cap sync android
+      - name: Giải mã khóa ký (nếu có secret)
+        env:
+          KEYSTORE_B64: ${{ secrets.NETVIP_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/netvip.jks"
+            echo "NETVIP_KEYSTORE=$RUNNER_TEMP/netvip.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Build APK
+        working-directory: bot_net/android
+        env:
+          NETVIP_STORE_PASSWORD: ${{ secrets.NETVIP_STORE_PASSWORD }}
+          NETVIP_KEY_ALIAS: ${{ secrets.NETVIP_KEY_ALIAS }}
+          NETVIP_KEY_PASSWORD: ${{ secrets.NETVIP_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+      - id: ver
+        run: echo "v=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Đặt tên APK kèm phiên bản
+        env:
+          VER: ${{ steps.ver.outputs.v }}
+        run: cp android/app/build/outputs/apk/release/app-release.apk "bot-net-$VER.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bot-net-${{ steps.ver.outputs.v }}
+          path: bot_net/bot-net-${{ steps.ver.outputs.v }}.apk
+      - name: Phát hành bản tải lẻ (không chiếm bản mới nhất của Net Vip)
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.ver.outputs.v }}
+        run: |
+          awk -v v="$VER" '$0=="## "v{f=1;next} /^## /{f=0} f' bot_net/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          F="bot_net/bot-net-$VER.apk"
+          if gh release view "bot-net-v$VER" >/dev/null 2>&1; then
+            gh release upload "bot-net-v$VER" "$F" --clobber
+            gh release edit "bot-net-v$VER" --notes-file "$RUNNER_TEMP/notes.md" --latest=false
+          else
+            gh release create "bot-net-v$VER" "$F" --target "$GITHUB_SHA" --title "Bot Net $VER" --notes-file "$RUNNER_TEMP/notes.md" --latest=false
+          fi
