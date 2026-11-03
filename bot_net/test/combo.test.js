@@ -87,3 +87,21 @@ test('checkKeys: kiểm tra đồng loạt, giữ thứ tự, không quá giới
   assert.deepEqual(r.map((x) => x.state), ['ok', 'invalid', 'ok', 'ok', 'ok']);
   assert.ok(peak <= 2);
 });
+
+test('filterForRole: chat chữ bỏ model ảnh/giọng/nhúng/Live, tạo ảnh chỉ giữ model ảnh', async () => {
+  const { filterForRole } = await import('../www/js/core/combo.js');
+  const ms = ['gemini-3.5-flash', 'gemini-2.5-flash-image', 'gemini-3.1-flash-tts-preview', 'gemma-4-31b-it', 'gemini-3.5-transcribe', 'imagen-4'].map((id) => ({ id }));
+  assert.deepEqual(filterForRole(ms, 'text').map((m) => m.id), ['gemini-3.5-flash', 'gemma-4-31b-it']);
+  assert.deepEqual(filterForRole(ms, 'image').map((m) => m.id), ['gemini-2.5-flash-image', 'imagen-4']);
+});
+
+test('rankModels: chỉ giữ model sống, nhanh nhất lên đầu, tối đa N, bỏ model hết hạn mức/không có hạn mức/404/bận', async () => {
+  const { rankModels } = await import('../www/js/core/combo.js');
+  const res = [
+    { model: 'a', state: 'ok', ms: 900 }, { model: 'b', state: 'quota', ms: 100 }, { model: 'c', state: 'ok', ms: 300 },
+    { model: 'd', state: 'noquota', ms: 100 }, { model: 'e', state: 'model', ms: 100 }, { model: 'f', state: 'server', ms: 100 }, { model: 'g', state: 'ok', ms: 600 },
+  ];
+  assert.deepEqual(rankModels(res, 2), ['c', 'g']);
+  assert.deepEqual(rankModels(res), ['c', 'g', 'a']);
+  assert.deepEqual(rankModels([{ model: 'x', state: 'quota', ms: 1 }]), []);
+});

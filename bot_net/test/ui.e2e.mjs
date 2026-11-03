@@ -33,8 +33,9 @@ const mockInit = () => {
       if (r.url.endsWith('/ajax/chat/send')) { const m = new URLSearchParams(r.data).get('message'); window.__sent.push(m); return ok({ status: true }); }
       if ((r.headers['x-goog-api-key'] || '').includes('BAD')) return { status: 400, headers: {}, data: { error: { message: 'API key not valid. Please pass a valid API key.' } } };
       if ((r.headers['x-goog-api-key'] || '').includes('QUOTA')) return { status: 429, headers: {}, data: { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'You exceeded your current quota', details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '100' }] }] } } };
+      if (r.url.includes('models/gemini-noq-pro:')) return { status: 429, headers: {}, data: { error: { code: 429, message: 'quota', details: [{ violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' }] }] } } };
       if (r.url.includes('models/gemini-pro:')) return { status: 404, headers: {}, data: {} };
-      if (r.url.includes('/v1beta/models?')) return ok({ models: [{ name: 'models/gemini-fast', displayName: 'Gemini Fast', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-pro', displayName: 'Gemini Pro', inputTokenLimit: 2000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-2.0-flash-image', displayName: 'Flash Image', inputTokenLimit: 32000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }] });
+      if (r.url.includes('/v1beta/models?')) return ok({ models: [{ name: 'models/gemini-fast', displayName: 'Gemini Fast', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-pro', displayName: 'Gemini Pro', inputTokenLimit: 2000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-quick', displayName: 'Quick', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-noq-pro', displayName: 'NoQ', inputTokenLimit: 1000000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }, { name: 'models/gemini-2.0-flash-image', displayName: 'Flash Image', inputTokenLimit: 32000, outputTokenLimit: 8192, supportedGenerationMethods: ['generateContent'] }] });
       if (r.url.includes(':generateContent')) return ok({ candidates: [{ content: { parts: [{ text: `Chào bạn ${++gN}, mình là Ly nè` }] } }], usageMetadata: { totalTokenCount: 21 } });
       return { status: 404, headers: {}, data: '' };
     },
@@ -89,7 +90,7 @@ assert.ok(av.w <= 52, 'avatar nhỏ: ' + av.w); assert.match(av.r, /50%|\d{2,}px
 // combo chat chữ: thêm nhiều model (chọn nhiều + tự gõ), có thứ tự
 await p.locator('[data-add="text"]').click();
 await p.waitForSelector('.model');
-assert.equal(await T('.model').count(), 2); await shot('5-models');
+assert.equal(await T('.model').count(), 4); await shot('5-models');
 await p.locator('.model[data-id="gemini-fast"]').click();
 await p.locator('.model[data-id="gemini-pro"]').click();
 await T('#modelManual').fill('gemini-custom'); await T('#modelManualAdd').click();
@@ -193,6 +194,18 @@ assert.equal(a.keys.length, 3); assert.equal(a.command, '/ly'); assert.equal(a.m
 // 10) Xuất cấu hình không kèm bí mật
 const exp = JSON.parse(await p.evaluate(() => window.__mgr.exportConfig(false)));
 assert.equal(exp.accounts[0].password, ''); assert.deepEqual(exp.accounts[0].keys, []);
+
+// 11) Quét model: chỉ model sống vào combo, model 404/không có hạn mức bị loại
+await p.evaluate(() => document.querySelectorAll('.sheet').forEach((x) => x.remove()));
+await T('#btnAccounts').click(); await T('.acc .meta').click();
+p.once('dialog', (d) => d.accept());
+await T('#comboScan').click();
+await p.waitForSelector('.scan-row');
+assert.match(await p.locator('.scan-row[data-model="gemini-noq-pro"] .badge').innerText(), /Không có hạn mức/);
+assert.match(await p.locator('.scan-row[data-model="gemini-pro"] .badge').innerText(), /Chết/);
+await T('#scanApply').click();
+await p.waitForTimeout(300);
+assert.deepEqual([...(await p.evaluate(() => window.__mgr.accounts[0].combo.text))].sort(), ['gemini-fast', 'gemini-quick']);
 
 assert.deepEqual(errs, [], 'không có lỗi JS: ' + errs.join('|'));
 console.log('ui e2e: PASS');

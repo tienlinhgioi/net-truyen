@@ -1,5 +1,9 @@
 // Chọn model Gemini: danh sách tải từ Google (kèm giới hạn token và mức dùng app tự đếm), chọn nhiều hoặc tự gõ tên.
 import { h, openSheet, toast } from './dom.js';
+import { filterForRole } from '../core/combo.js';
+
+/** Cảnh báo theo tên model (dựa trên thực tế gói miễn phí). */
+const noteFor = (id) => (/pro/i.test(id) ? 'Pro thường không có hạn mức miễn phí (hay báo 429).' : /gemma/i.test(id) ? 'Rất chậm và hay in cả phần suy nghĩ, không khuyên dùng để chat.' : '');
 
 const fmt = (n) => (n == null ? '?' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
 
@@ -7,18 +11,6 @@ const fmt = (n) => (n == null ? '?' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n 
  * @param multi    true = chọn nhiều, bấm "Thêm" để xác nhận (onDone(list)); false = chọn một (onPick(id))
  * @param selected các model đã có sẵn trong danh sách (hiện dấu tích khi multi)
  */
-const NOT_CHAT = /image|imagen|tts|embedding|embed|aqa|veo|live|audio|robotics|computer-use|learnlm|native-audio/i;
-/** Cảnh báo theo tên model (dựa trên thực tế gói miễn phí). */
-const noteFor = (id) => (/pro/i.test(id) ? 'Pro thường không có hạn mức miễn phí (hay báo 429).' : /gemma/i.test(id) ? 'Rất chậm và hay in cả phần suy nghĩ, không khuyên dùng để chat.' : '');
-const IS_IMAGE = /image|imagen/i;
-
-/** Lọc danh sách theo vai: chat chữ bỏ model ảnh/giọng nói..., tạo ảnh chỉ giữ model ảnh. */
-export function filterForRole(models, role) {
-  if (role === 'image') return models.filter((m) => IS_IMAGE.test(m.id));
-  if (role === 'text' || role === 'vision') return models.filter((m) => !NOT_CHAT.test(m.id));
-  return models;
-}
-
 export function openModelPicker(mgr, { keys, current, multi = false, selected = [], role = null, onPick, onDone }) {
   openSheet({
     title: multi ? 'Thêm model vào combo' : 'Chọn model Gemini', side: 'right',

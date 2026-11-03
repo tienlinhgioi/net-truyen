@@ -1,6 +1,6 @@
 {
   "name": "bot-net",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "description": "Bot Net - bot chat Gemini nhiều tài khoản cho NetTruyen",

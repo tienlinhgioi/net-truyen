@@ -1,5 +1,9 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.6
+- Nút "Quét và tự chọn model sống" trong combo chat chữ: thử từng model chat bằng key của bạn (mỗi model tốn 1 lượt nhỏ), hiện model nào sống, hết hạn mức hôm nay, không có hạn mức miễn phí, bận hay không tồn tại, rồi tự đặt combo từ các model sống, nhanh nhất lên đầu (tối đa 5).
+- Bộ lọc model theo vai (chat chữ, tạo ảnh) chuyển vào lõi và loại thêm các model phiên âm, nhạc, nghiên cứu, Live.
+
 ## 1.0.5
 - Tìm ra nguyên nhân lỗi 429 bằng cách thử với key thật: gói miễn phí chỉ cho rất ít lượt mỗi ngày theo từng model (ví dụ gemini-3.8-flash chỉ 20 lượt/ngày, nghỉ khoảng 22 giờ), và model Pro không có hạn mức miễn phí (luôn 429). App giờ nhận ra cả hai: học giới hạn thật từ Google, hiện đúng phần trăm và lý do ("model không có hạn mức miễn phí", "hết hạn mức theo ngày (20 lượt)"), nghỉ đúng thời gian Google báo.
 - Tiết kiệm hạn mức: tin tự chen vào/mở chủ đề không dùng model đã dùng từ 70% hạn mức; model gần hết (từ 95%) bị đẩy xuống cuối combo để model còn hạn mức trả lời trước; tắt chạy song song model dự phòng theo mặc định (vì nhân đôi số lượt), bật được trong Cài đặt.

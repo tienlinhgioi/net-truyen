@@ -7,7 +7,7 @@ import { LimitBook, percentOf } from './core/limits.js';
 import { ModelHealth } from './core/combo.js';
 import { parseDirective } from './core/directive.js';
 import { UserMemory } from './core/convo.js';
-import { comboFor } from './core/combo.js';
+import { comboFor, filterForRole, rankModels } from './core/combo.js';
 import { KeyPool } from './core/keys.js';
 
 export class Manager {
@@ -273,6 +273,33 @@ export class Manager {
     }));
     this.emit('models');
     return out;
+  }
+
+  /**
+   * Quét model dùng được: thử từng model chat chữ bằng key đầu tiên (mỗi model tốn 1 lượt nhỏ), 2 yêu cầu song song.
+   * Trả về kết quả từng model và danh sách đề xuất (sống, nhanh nhất lên đầu).
+   */
+  async scanModels(keys, onProgress = () => {}) {
+    const key = keys[0];
+    if (!key) throw new Error('Chưa có API key');
+    const models = filterForRole(await listModels(this.http, key), 'text').filter((m) => !/gemma/i.test(m.id));
+    const results = [];
+    let i = 0;
+    const worker = async () => {
+      while (i < models.length) {
+        const m = models[i++];
+        let r;
+        try { r = await checkModel(this.http, key, m.id); } catch (e) { r = { alive: false, state: 'error', ms: 0, detail: e.message, limits: [] }; }
+        for (const l of r.limits || []) this.limits.learn(m.id, l);
+        this.modelStatus[m.id] = { ...r, at: Date.now() };
+        results.push({ model: m.id, ...r });
+        onProgress(results.length, models.length);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(2, models.length) }, worker));
+    this.save(); this.emit('models');
+    results.sort((a, b) => models.findIndex((x) => x.id === a.model) - models.findIndex((x) => x.id === b.model));
+    return { results, best: rankModels(results, 5) };
   }
 
   /** Báo cáo theo ngày (gộp mọi tài khoản), mới nhất trước. */
