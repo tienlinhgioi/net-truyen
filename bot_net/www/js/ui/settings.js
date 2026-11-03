@@ -124,7 +124,12 @@ function behavior(body, mgr, applyTheme) {
       num('Tiếp tục trò chuyện trong', 'convoWindowMs', 'phút', 'setConvo', 60000),
       sw('Tự mở chủ đề khi phòng chat vắng', 'starterEnabled'), num('Phòng vắng bao lâu thì mở chủ đề', 'starterIdleMs', 'phút', 'setStarterIdle', 60000),
       h('label', { class: 'f' }, 'Từ nhạy cảm: không chen vào, thấy cãi vã thì đứng ngoài (mỗi dòng một từ)', ta('setSensitive', 'sensitiveWords'))),
-    h('div', { class: 'sec' }, h('h3', { text: 'Ảnh' }),
+    h('div', { class: 'sec' }, h('h3', { text: 'Truy cập internet' }),
+      h('span', { class: 'hint', text: 'Câu hỏi kiến thức được tra Wikipedia (miễn phí, không tốn lượt Gemini) rồi bot trả lời dựa vào đó; khi có người nhờ xem ảnh thật, bot tìm ảnh Creative Commons trên Openverse (đã lọc nội dung người lớn). Không có tin tức mới nhất vì Google Search của Gemini cần gói trả phí.' }),
+      sw('Cho bot tra Wikipedia và tìm ảnh trên mạng', 'webEnabled'),
+      num('Tối đa lượt tra Wikipedia mỗi giờ (mỗi tài khoản)', 'webPerHour', 'lượt', 'setWebHour', 1),
+      num('Giới hạn số ảnh tìm trên mạng mỗi ngày (mỗi tài khoản)', 'photoPerDay', 'ảnh', 'setPhotoDay', 1), num('Chờ giữa hai lần tìm ảnh', 'photoCooldownMs', 'giây', 'setPhotoCd', 1000)),
+    h('div', { class: 'sec' }, h('h3', { text: 'Ảnh AI vẽ' }),
       h('span', { class: 'hint', text: 'Ảnh bot tạo được tải lên bằng chính tài khoản đang chat, không cần khóa nào. Lưu ý: gói miễn phí của Google thường KHÔNG có hạn mức tạo ảnh (key sẽ báo "không có hạn mức miễn phí"), cần bật thanh toán cho dự án của key.' }),
       num('Giới hạn số ảnh tạo mỗi ngày (mỗi tài khoản)', 'imagePerDay', 'ảnh', 'setImgDay', 1), num('Chờ giữa hai lần tạo ảnh', 'imageCooldownMs', 'giây', 'setImgCd', 1000)));
 }
@@ -154,6 +159,7 @@ function system(body, mgr, applyTheme) {
       h('div', { class: 'sw-row' }, h('span', { text: 'Chạy ngầm (giữ app khi tắt màn hình)' }), switchEl(st.runInBackground, (on) => set({ runInBackground: on }))),
       h('span', { class: 'hint', text: 'Tắt chạy ngầm thì bot dừng khi app ra nền. Nên tắt "tối ưu pin" cho Bot Net trong cài đặt điện thoại để chạy ngầm ổn định.' }),
       h('button', { class: 'btn ghost', id: 'openReport', text: 'Báo cáo hằng ngày', onclick: () => openReport(mgr) }),
+      h('button', { class: 'btn danger', id: 'clearAllMemory', text: 'Xóa ghi chú cũ của tất cả tài khoản', onclick: () => { if (confirm('Xóa ghi chú bot đã nhớ về người chat ở TẤT CẢ tài khoản và nạp lại AI từ đầu?')) { mgr.clearAllMemory(); toast('Đã xóa ghi chú cũ của tất cả tài khoản'); } } }),
       h('div', { class: 'grid2' },
         h('button', { class: 'btn ghost', id: 'cfgExport', text: 'Xuất cấu hình', onclick: () => { download('bot-net-cau-hinh.json', mgr.exportConfig(false)); toast('Đã xuất (không kèm mật khẩu và key)'); } }),
         h('button', { class: 'btn ghost', id: 'cfgImport', text: 'Nhập cấu hình', onclick: async () => { const t = await pickTextFile(); if (!t) return; try { await mgr.importConfig(t); applyTheme(); toast('Đã nhập cấu hình, các tài khoản đang tắt'); } catch (e) { toast(e.message); } } }))));

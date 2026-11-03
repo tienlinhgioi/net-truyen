@@ -19,11 +19,12 @@ const dayOf = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad
 
 /** Giới hạn tạo ảnh: tối đa [perDay] ảnh mỗi ngày và cách nhau ít nhất [cooldownMs]. Trạng thái nằm trong stats.img. */
 export class ImageQuota {
-  constructor({ perDay = 5, cooldownMs = 60000, now = () => Date.now() } = {}) { this.perDay = perDay; this.cooldownMs = cooldownMs; this.now = now; }
+  constructor({ perDay = 5, cooldownMs = 60000, now = () => Date.now(), field = 'img' } = {}) { this.perDay = perDay; this.cooldownMs = cooldownMs; this.now = now; this.field = field; }
   #state(stats) {
     const d = dayOf(this.now());
-    if (!stats.img || stats.img.day !== d) stats.img = { day: d, count: 0, last: stats.img?.last || 0 };
-    return stats.img;
+    const f = this.field;
+    if (!stats[f] || stats[f].day !== d) stats[f] = { day: d, count: 0, last: stats[f]?.last || 0 };
+    return stats[f];
   }
   check(stats) {
     const s = this.#state(stats);

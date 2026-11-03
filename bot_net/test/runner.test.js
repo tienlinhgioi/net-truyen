@@ -360,3 +360,73 @@ test('lỗi ảnh nêu rõ lý do thật (model ảnh không có hạn mức mi�
   assert.match(msg, /img-a/);
   assert.doesNotMatch(msg, /nokey/);
 });
+
+const webSetup = (extra = {}) => {
+  const seen = { wiki: 0, photo: 0, prompts: [] };
+  const base = setup(mention({
+    gemini: (r) => { seen.prompts.push(JSON.stringify(r.data.contents)); return json(extra.reply || { reply: 'Naruto là ninja nhé' }); },
+    settings: extra.settings || {},
+  }));
+  return { ...base, seen };
+};
+
+test('tra kiến thức: câu hỏi kiến thức được tra Wikipedia và tóm tắt đưa vào lời nhắc (chỉ 1 lượt Gemini)', async () => {
+  let wiki = 0, gem = 0;
+  const seen = [];
+  const t = setup({
+    chatLists: [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', '/ai Naruto là gì?', 'A')]],
+    gemini: (r) => { gem++; seen.push(JSON.stringify(r.data.contents)); return json({ reply: 'Naruto là ninja làng Lá đó' }); },
+  });
+  const orig = t.bot.http;
+  t.bot.http = async (r) => { if (r.url.includes('wikipedia.org')) { wiki++; return { status: 200, headers: {}, data: { query: { pages: [{ title: 'Naruto', extract: 'Naruto là bộ manga của Kishimoto Masashi.', index: 1, fullurl: 'https://vi.wikipedia.org/wiki/Naruto' }] } } }; } return orig(r); };
+  t.bot.client.http = t.bot.http;
+  await twoTicks(t);
+  assert.equal(wiki, 1);
+  assert.equal(gem, 1);
+  assert.match(seen[0], /Kishimoto Masashi/);
+  assert.ok(t.logs.some((l) => /Wikipedia/.test(l.text)));
+});
+
+test('tra kiến thức: tán gẫu thì không tra; tắt trong cài đặt thì không tra', async () => {
+  let wiki = 0;
+  const run = async (question, settings) => {
+    const t = setup({ chatLists: [[m(1, 'u', 'x')], [m(1, 'u', 'x'), m(2, 'u', question, 'A')]], settings, gemini: () => json({ reply: 'ừ nhé' }) });
+    const orig = t.bot.http;
+    t.bot.http = async (r) => { if (r.url.includes('wikipedia.org')) { wiki++; return { status: 200, headers: {}, data: { query: { pages: [] } } }; } return orig(r); };
+    t.bot.client.http = t.bot.http;
+    await twoTicks(t);
+  };
+  await run('/ai chào bạn khỏe không', {});
+  assert.equal(wiki, 0, 'tán gẫu không tra');
+  await run('/ai Naruto là gì?', { webEnabled: false });
+  assert.equal(wiki, 0, 'tắt truy cập internet thì không tra');
+});
+
+test('tìm ảnh trên mạng: gửi chữ rồi ảnh Creative Commons, tính vào giới hạn số tin', async () => {
+  const photo = { status: 200, headers: {}, data: { results: [{ title: 'Orange cat', thumbnail: 'https://api.openverse.org/v1/images/9/thumb/', license: 'by', creator: 'Ai đó' }] } };
+  const t = setup(mention({ gemini: () => json({ reply: 'nè bạn xem mèo', photo: 'orange cat' }) }));
+  const orig = t.bot.http;
+  t.bot.http = async (r) => (r.url.includes('openverse.org') ? photo : orig(r));
+  t.bot.client.http = t.bot.http;
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['nè bạn xem mèo', '[IMG=https://api.openverse.org/v1/images/9/thumb/]']);
+  assert.ok(t.logs.some((l) => /Openverse|ảnh trên mạng/i.test(l.text)));
+});
+
+test('tìm ảnh trên mạng: không tìm thấy thì chỉ ghi nhật ký; từ nhạy cảm thì không tìm', async () => {
+  const empty = { status: 200, headers: {}, data: { results: [] } };
+  let calls = 0;
+  const t = setup(mention({ gemini: () => json({ reply: 'để mình tìm', photo: 'zzzz' }) }));
+  const orig = t.bot.http;
+  t.bot.http = async (r) => { if (r.url.includes('openverse.org')) { calls++; return empty; } return orig(r); };
+  t.bot.client.http = t.bot.http;
+  await twoTicks(t);
+  assert.deepEqual(t.sent, ['để mình tìm']);
+  assert.ok(t.logs.some((l) => /Không tìm thấy ảnh/.test(l.text)));
+  const s = setup(mention({ gemini: () => json({ reply: 'ok', photo: 'đm xxx' }) }));
+  const o2 = s.bot.http; let c2 = 0;
+  s.bot.http = async (r) => { if (r.url.includes('openverse.org')) { c2++; return empty; } return o2(r); };
+  s.bot.client.http = s.bot.http;
+  await twoTicks(s);
+  assert.equal(c2, 0, 'từ khóa nhạy cảm không được dùng để tìm ảnh');
+});

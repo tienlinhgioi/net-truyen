@@ -9,7 +9,8 @@ import { normalize, limitChars, squashMsg, replaceSelf, cleanReply } from './tex
 import { comboFor, ModelHealth, orderByBudget } from './combo.js';
 import { parseDirective } from './directive.js';
 import { pickSticker, ImageQuota } from './media.js';
-import { moodFor, typingDelayMs, splitReply, isRepeat } from './persona.js';
+import { moodFor, typingDelayMs, splitReply, isRepeat, sensitiveHit } from './persona.js';
+import { needsKnowledge, knowledgeQuery, wikiSearch, searchPhoto } from './web.js';
 import { ConvoTracker, UserMemory } from './convo.js';
 
 /** Tập các tài khoản bot (theo user_id chat hoặc tên hiển thị) để chống vòng lặp. */
@@ -38,8 +39,8 @@ export function buildSystem(account, settings, { mood = '', notes = [] } = {}) {
     max ? `Mỗi câu trả lời tối đa ${max} ký tự.` : '',
     mood,
     notes.length ? `Điều bạn đã biết về người đang nói chuyện: ${notes.join('; ')}.` : '',
-    'Luôn trả về DUY NHẤT một JSON: {"reply":"nội dung nhắn","sticker":false,"draw":"","manga":"","remember":""}.',
-    '"sticker": true thỉnh thoảng khi hợp ngữ cảnh. "draw": chỉ điền mô tả ảnh khi người ta nhờ vẽ/tạo ảnh. "manga": chỉ điền tên truyện khi người ta nhờ gửi/giới thiệu một truyện cụ thể. "remember": một điều ngắn đáng nhớ về người đối thoại (nếu có).',
+    'Luôn trả về DUY NHẤT một JSON: {"reply":"nội dung nhắn","sticker":false,"draw":"","photo":"","manga":"","remember":""}.',
+    'Nếu có phần "Thông tin tham khảo" thì dựa vào đó để trả lời đúng sự thật, tóm tắt ngắn bằng giọng của bạn, không chép nguyên văn. "sticker": true thỉnh thoảng khi hợp ngữ cảnh. "draw": chỉ điền mô tả ảnh khi người ta nhờ vẽ/tạo ảnh bằng AI. "photo": từ khóa tiếng Anh ngắn để tìm một ẢNH CÓ THẬT trên mạng khi người ta nhờ cho xem/gửi ảnh của một thứ có thật (động vật, cảnh vật, đồ vật...). "manga": chỉ điền tên truyện khi người ta nhờ gửi/giới thiệu một truyện cụ thể. "remember": một điều ngắn đáng nhớ về người đối thoại (nếu có).',
   ].filter(Boolean).join('\n');
 }
 
@@ -55,7 +56,7 @@ export class AccountBot {
     this.convo = new ConvoTracker({ now: this.nowMs });
     this.lastId = null; this.pending = []; this.lastSentTexts = []; this.mult = 1; this.running = false;
     this.stopped = false; this.sentNorms = new Set(); this.botReplyAt = new Map();
-    this.lastSendAt = 0; this.lastProfileAt = 0; this.lastStarterAt = 0; this.recent = []; this.proTimes = [];
+    this.lastSendAt = 0; this.lastProfileAt = 0; this.lastStarterAt = 0; this.recent = []; this.proTimes = []; this.wikiTimes = [];
     this.stats = account.stats || (account.stats = { sent: 0, errors: 0, lastAt: 0, days: {} });
     this.stats.days ??= {};
     bots.add(account);
@@ -67,7 +68,7 @@ export class AccountBot {
     const d = new Date(this.nowMs());
     const k = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const days = this.stats.days;
-    days[k] ??= { sent: 0, errors: 0, proactive: 0, images: 0, mangas: 0, stickers: 0 };
+    days[k] ??= { sent: 0, errors: 0, proactive: 0, images: 0, mangas: 0, stickers: 0, photos: 0 };
     const keys = Object.keys(days).sort();
     while (keys.length > 14) delete days[keys.shift()];
     return days[k];
@@ -249,8 +250,9 @@ export class AccountBot {
     const past = this.convo.history(task.userId).flatMap((h) => [{ name: task.from, text: h.q }, { name: a.displayName || a.name, text: h.a }]);
     const context = [...past, ...(task.context || [])];
     const hint = task.kind === 'proactive' ? '\n(Bạn tự chen vào câu chuyện, không phải ai gọi bạn: bình luận ngắn như một người bạn, đừng giới thiệu bản thân.)' : '';
+    const ref = await this.#knowledge(task, st);
     const ask = (extra = '') => generateCombo({
-      http: this.http, pool: this.pool, health: this.health, models, system, context, question: task.question + hint + extra,
+      http: this.http, pool: this.pool, health: this.health, models, system, context, question: task.question + ref + hint + extra,
       asker: task.from, askVerb: task.kind === 'mention' ? 'hỏi' : 'nói', mode: 'json', keyDelayMs: st.keyDelayMs, sleep: this.sleep, onLimit: this.onLimit, onPlan: this.onPlan, hedgeMs: urgentTask ? (st.hedgeMs ?? 0) : 0,
     });
     let d = parseDirective((await ask()).text);
@@ -281,7 +283,7 @@ export class AccountBot {
     if (task.kind === 'proactive' || task.kind === 'starter') { this.proTimes.push(this.nowMs()); this.#bump('proactive'); }
     if (reply) { this.recent = [...this.recent, reply].slice(-6); }
 
-    for (const [wanted, run] of [[d.manga, () => this.#sendManga(d.manga, st)], [d.draw, () => this.#sendImage(d.draw, st)], [d.sticker, () => this.#sendSticker(st)]]) {
+    for (const [wanted, run] of [[d.manga, () => this.#sendManga(d.manga, st)], [d.photo, () => this.#sendPhoto(d.photo, st)], [d.draw, () => this.#sendImage(d.draw, st)], [d.sticker, () => this.#sendSticker(st)]]) {
       if (!wanted) continue;
       if (budget <= 0) { dropped++; continue; }
       if (await run()) budget--;
@@ -291,6 +293,37 @@ export class AccountBot {
     if (task.userId) this.convo.touch(task.userId, task.from, task.question, reply);
     if (task.fromBot) this.botReplyAt.set(task.userId || task.from, this.nowMs());
     return 'sent';
+  }
+
+  /** Tra Wikipedia khi là câu hỏi kiến thức (miễn phí, không tốn lượt Gemini); trả về đoạn tư liệu gắn vào lời nhắc. */
+  async #knowledge(task, st) {
+    if (st.webEnabled === false || task.kind === 'starter' || !needsKnowledge(task.question)) return '';
+    const t = this.nowMs();
+    this.wikiTimes = this.wikiTimes.filter((x) => t - x < 3600000);
+    if (this.wikiTimes.length >= (st.webPerHour ?? 30)) return '';
+    this.wikiTimes.push(t);
+    const q = knowledgeQuery(task.question, this.account);
+    const found = await wikiSearch(this.http, q);
+    this.log(found.length ? `Tra Wikipedia "${q}": ${found.map((f) => f.title).join(', ')}` : `Tra Wikipedia "${q}": không có kết quả`, found.length ? 'info' : 'warn');
+    if (!found.length) return '';
+    return `\n\n[Thông tin tham khảo từ Wikipedia: ${found.map((f) => `${f.title}: ${f.extract}`).join(' | ')}]`;
+  }
+
+  async #sendPhoto(query, st) {
+    if (st.webEnabled === false) return false;
+    if (sensitiveHit(query, st.sensitiveWords || [])) { this.log('Bỏ qua yêu cầu tìm ảnh có từ nhạy cảm', 'warn'); return false; }
+    const quota = new ImageQuota({ perDay: st.photoPerDay ?? 20, cooldownMs: st.photoCooldownMs ?? 20000, now: this.nowMs, field: 'photo' });
+    const q = quota.check(this.stats);
+    if (!q.ok) { this.log(q.reason === 'daily' ? 'Đã đạt giới hạn số ảnh tìm trên mạng mỗi ngày' : 'Đang chờ giữa hai lần tìm ảnh (giới hạn)', 'warn'); return false; }
+    const p = await searchPhoto(this.http, query, this.rand);
+    if (!p) { this.log(`Không tìm thấy ảnh "${query}" trên mạng`, 'warn'); return false; }
+    await this.#waitToSend(8, this.nowMs(), st);
+    if (await this.#send(`[IMG=${p.url}]`, st)) {
+      quota.record(this.stats); this.#bump('photos');
+      this.log(`Ảnh trên mạng (Openverse): ${p.title || query}${p.license ? ` · giấy phép CC ${p.license}` : ''}${p.creator ? ` · ${p.creator}` : ''}`);
+      return true;
+    }
+    return false;
   }
 
   async #sendSticker(st) {

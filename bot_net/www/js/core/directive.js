@@ -1,9 +1,9 @@
 // Gemini trả về JSON {reply, sticker, draw, manga, remember}; hàm này đọc chắc tay cả khi JSON hỏng.
 
-const blank = (reply = '') => ({ reply, sticker: false, draw: '', manga: '', remember: '' });
+const blank = (reply = '') => ({ reply, sticker: false, draw: '', photo: '', manga: '', remember: '' });
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
-const pick = (o) => ({ reply: str(o.reply), sticker: o.sticker === true, draw: str(o.draw), manga: str(o.manga), remember: str(o.remember) });
+const pick = (o) => ({ reply: str(o.reply), sticker: o.sticker === true, draw: str(o.draw), photo: str(o.photo), manga: str(o.manga), remember: str(o.remember) });
 
 /** Văn bản giống đoạn "suy nghĩ" của model (gạch đầu dòng, Persona, Constraint...) thì không được gửi vào chat. */
 function looksLikeReasoning(t) {

@@ -13,7 +13,7 @@ export function openReport(mgr) {
           h('div', { class: 'grid2' },
             h('span', { text: `Tin đã gửi: ${r.sent}` }), h('span', { text: `Lỗi: ${r.errors}` }),
             h('span', { text: `Tự chen vào: ${r.proactive}` }), h('span', { text: `Sticker: ${r.stickers}` }),
-            h('span', { text: `Truyện: ${r.mangas}` }), h('span', { text: `Ảnh: ${r.images}` }))));
+            h('span', { text: `Truyện: ${r.mangas}` }), h('span', { text: `Ảnh AI vẽ: ${r.images}` }), h('span', { text: `Ảnh tìm trên mạng: ${r.photos}` }))));
       }
       const keys = mgr.accounts.flatMap((a) => a.keys);
       const bad = keys.filter((k) => mgr.keyStatus[k] && mgr.keyStatus[k].state !== 'ok').length;

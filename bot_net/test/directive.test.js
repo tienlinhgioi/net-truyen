@@ -4,7 +4,7 @@ import { parseDirective } from '../www/js/core/directive.js';
 
 test('JSON chuẩn', () => {
   const d = parseDirective('{"reply":"chào nha","sticker":true,"draw":null,"manga":"One Piece","remember":"thích ăn bún"}');
-  assert.deepEqual(d, { reply: 'chào nha', sticker: true, draw: '', manga: 'One Piece', remember: 'thích ăn bún' });
+  assert.deepEqual(d, { reply: 'chào nha', sticker: true, draw: '', photo: '', manga: 'One Piece', remember: 'thích ăn bún' });
 });
 
 test('JSON bọc trong khối code', () => {
@@ -13,7 +13,7 @@ test('JSON bọc trong khối code', () => {
 });
 
 test('không phải JSON thì coi cả đoạn là câu trả lời', () => {
-  assert.deepEqual(parseDirective('Chào bạn nhé'), { reply: 'Chào bạn nhé', sticker: false, draw: '', manga: '', remember: '' });
+  assert.deepEqual(parseDirective('Chào bạn nhé'), { reply: 'Chào bạn nhé', sticker: false, draw: '', photo: '', manga: '', remember: '' });
 });
 
 test('JSON hỏng nửa chừng vẫn cứu được phần reply', () => {

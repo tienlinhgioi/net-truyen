@@ -112,6 +112,29 @@ export function openEditor(mgr, id) {
       const mr = h('input', { type: 'number', min: 0, max: 8, value: a.maxReplies || 0, id: 'fMaxReplies', onchange: (e) => save({ maxReplies: Math.min(8, Math.max(0, Number(e.target.value) || 0)) }) });
       const mx = h('input', { type: 'number', min: 0, value: a.maxChars, id: 'fMax', onchange: (e) => save({ maxChars: Math.max(0, Number(e.target.value) || 0) }) });
 
+      // ---- Trí nhớ: ghi chú bot đã nhớ về từng người chat ----
+      const memBox = h('div', { class: 'sec', id: 'memBox' });
+      const renderMem = () => {
+        memBox.replaceChildren();
+        const rows = mgr.memoryOf(id);
+        if (!rows.length) memBox.append(h('span', { class: 'hint', text: 'Chưa có ghi chú nào về người chat.' }));
+        for (const r of rows) memBox.append(h('div', { class: 'keyblock mem-row', 'data-uid': r.uid },
+          h('div', { class: 'keyrow' }, h('b', { text: r.name || r.uid }), h('button', { class: 'link', text: 'Quên', onclick: () => { mgr.forgetUser(id, r.uid); renderMem(); } })),
+          h('div', { class: 'hint', text: r.notes.join(' · ') })));
+      };
+      renderMem();
+      const reloadBtn = h('button', { class: 'btn ghost', id: 'reloadPrompt', text: 'Nạp lại prompt mới cho AI ngay', onclick: () => {
+        save({ prompt: pr.value });
+        mgr.reloadBot(id);
+        renderMem();
+        toast(mgr.isRunning(id) ? 'Đã nạp prompt mới, AI dùng ngay từ tin kế tiếp' : 'Đã lưu prompt mới (tài khoản đang tắt, sẽ dùng khi bật)');
+      } });
+      const clearBtn = h('button', { class: 'btn danger', id: 'clearMemory', text: 'Xóa ghi chú cũ và nạp lại AI từ đầu', onclick: () => {
+        if (!confirm('Xóa toàn bộ ghi chú bot đã nhớ về người chat và khởi động lại AI từ đầu?')) return;
+        save({ prompt: pr.value });
+        mgr.clearMemory(id); renderMem(); toast('Đã xóa ghi chú cũ, AI bắt đầu lại từ đầu');
+      } });
+
       // ---- Sticker ----
       const packsBox = h('div', { class: 'chips', id: 'packs' });
       const renderPacks = () => {
@@ -146,6 +169,8 @@ export function openEditor(mgr, id) {
         h('div', { class: 'sec' }, h('h3', { text: 'Nhận diện' }),
           field('Lệnh gọi (đặt ở đầu hoặc trong tin nhắn)', cmd), field('Tên gọi', nm), field('Tên gọi khác, ghi chú tìm kiếm thông minh (cách nhau dấu phẩy)', al)),
         h('div', { class: 'sec' }, h('h3', { text: 'Hồ sơ và prompt' }), pr, field('Giới hạn ký tự trả lời (0 = theo cài đặt chung)', mx), field('Số tin trả lời tối đa cho một câu hỏi (0 = theo cài đặt chung)', mr)),
+        h('div', { class: 'sec' }, h('h3', { text: 'Trí nhớ của AI' }),
+          h('span', { class: 'hint', text: 'Bot tự ghi nhớ điều đáng nhớ về từng người chat. Bạn xem, bảo bot quên từng người, hoặc xóa sạch rồi nạp lại prompt mới.' }), memBox, reloadBtn, clearBtn),
         h('div', { class: 'sec' }, h('h3', { text: 'Hành vi' }),
           h('div', { class: 'sw-row' }, h('span', { text: 'Thỉnh thoảng tự chen vào trò chuyện' }), switchEl(a.proactive !== false, (on) => save({ proactive: on }))),
           h('span', { class: 'muted', text: 'Bộ sticker tài khoản này được dùng' }), packsBox),

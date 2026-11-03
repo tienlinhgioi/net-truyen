@@ -87,7 +87,9 @@ export class Manager {
   }
 
   #kill(id) {
-    this.bots.get(id)?.stop();
+    const b = this.bots.get(id);
+    if (b) this.memory[id] = b.memory.toJSON(); // giữ lại ghi chú đã nhớ khi bot bị dừng/tạo lại (sửa tài khoản, nạp lại prompt)
+    b?.stop();
     this.bots.delete(id);
   }
 
@@ -222,6 +224,42 @@ export class Manager {
     this.paused = [];
   }
 
+  /** Ghi chú bot đã nhớ về từng người chat (đọc từ bot đang chạy nếu có). */
+  memoryOf(id) {
+    const data = this.bots.get(id)?.memory.toJSON() ?? this.memory[id] ?? {};
+    return Object.entries(data).map(([uid, v]) => ({ uid, name: v.name, notes: [...(v.notes || [])] })).filter((x) => x.notes.length);
+  }
+
+  /** Quên các ghi chú về một người. */
+  forgetUser(id, uid) {
+    const bot = this.bots.get(id);
+    if (bot) { bot.memory.forget(uid); this.memory[id] = bot.memory.toJSON(); }
+    else if (this.memory[id]) { const m = UserMemory.from(this.memory[id]); m.forget(uid); this.memory[id] = m.toJSON(); }
+    this.save();
+  }
+
+  /** Xóa sạch ghi chú cũ rồi nạp lại AI từ đầu (bot đang chạy được tạo lại, không còn trạng thái cũ). */
+  clearMemory(id) {
+    const running = this.bots.has(id);
+    if (running) this.#kill(id);
+    this.memory[id] = {};
+    if (running) this.#spawn(this.account(id));
+    this.save();
+    this.emit('accounts');
+  }
+
+  clearAllMemory() { for (const a of this.accounts) this.clearMemory(a.id); }
+
+  /** Nạp lại prompt/cấu hình mới cho AI ngay: bot đang chạy được tạo lại (vẫn giữ ghi chú đã nhớ). */
+  reloadBot(id) {
+    const bot = this.bots.get(id);
+    if (!bot) return;
+    const a = this.account(id);
+    this.#kill(id); this.#spawn(a);
+    this.save();
+    this.emit('accounts');
+  }
+
   async refreshProfile(id) {
     const bot = this.bots.get(id);
     const a = this.account(id);
@@ -346,7 +384,7 @@ export class Manager {
   report(days = 7) {
     const sum = {};
     for (const a of this.accounts) for (const [d, v] of Object.entries(a.stats?.days || {})) {
-      const x = (sum[d] ??= { sent: 0, errors: 0, proactive: 0, images: 0, mangas: 0, stickers: 0 });
+      const x = (sum[d] ??= { sent: 0, errors: 0, proactive: 0, images: 0, mangas: 0, stickers: 0, photos: 0 });
       for (const k of Object.keys(x)) x[k] += v[k] || 0;
     }
     return Object.entries(sum).sort((a, b) => b[0].localeCompare(a[0])).slice(0, days).map(([day, v]) => ({ day, ...v }));

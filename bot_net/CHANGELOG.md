@@ -1,5 +1,10 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.10
+- Cho AI truy cập internet: câu hỏi kiến thức ("... là gì", "ai là...", "ở đâu"...) được tra Wikipedia (tiếng Việt rồi tiếng Anh) và đưa tóm tắt cho Gemini làm tư liệu, vẫn chỉ 1 lượt Gemini mỗi câu hỏi. Khi có người nhờ xem ảnh thật, bot tìm ảnh Creative Commons trên Openverse (đã lọc nội dung người lớn) và gửi vào chat. Cả hai miễn phí, không cần khóa, có giới hạn mỗi giờ/ngày chỉnh được trong Cài đặt, và có thể tắt. Google Search của Gemini không dùng được ở gói miễn phí (luôn 429) nên không dùng.
+- Trí nhớ của AI: xem các ghi chú bot đã nhớ về từng người chat, bảo bot quên từng người; "Nạp lại prompt mới cho AI ngay"; "Xóa ghi chú cũ và nạp lại AI từ đầu" (mỗi tài khoản) và xóa ghi chú cũ của tất cả tài khoản trong Cài đặt.
+- Sửa lỗi sửa bất kỳ trường nào của tài khoản đang chạy làm mất hết ghi chú đã nhớ về người chat.
+
 ## 1.0.9
 - Giới hạn số tin trả lời cho một câu hỏi (mặc định 3, chỉnh chung trong Cài đặt hoặc riêng từng tài khoản): tin chữ được ưu tiên, rồi truyện, ảnh, sticker; phần vượt giới hạn bị bỏ và ghi vào nhật ký.
 - Cài đặt tách thành 4 màn riêng: Giao diện; Model và API key; Hành vi và tốc độ; Lịch và hệ thống.

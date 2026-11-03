@@ -225,6 +225,24 @@ assert.equal(a.keys.length, 3); assert.equal(a.command, '/ly'); assert.equal(a.m
 const exp = JSON.parse(await p.evaluate(() => window.__mgr.exportConfig(false)));
 assert.equal(exp.accounts[0].password, ''); assert.deepEqual(exp.accounts[0].keys, []);
 
+// 10b) Trí nhớ: xem/quên ghi chú từng người, nạp lại prompt, xóa ghi chú cũ và nạp lại AI
+const mid = await p.evaluate(() => window.__mgr.accounts[0].id);
+await p.evaluate((id) => { window.__mgr.setEnabled(id, true); window.__mgr.bots.get(id).memory.add('u1', 'An', 'thích bún'); window.__b0 = window.__mgr.bots.get(id); }, mid);
+await p.evaluate(() => document.querySelectorAll('.sheet').forEach((x) => x.remove()));
+await T('#btnAccounts').click(); await T('.acc .meta').click();
+assert.match(await p.locator('.mem-row[data-uid="u1"]').innerText(), /An[\s\S]*thích bún/);
+await p.locator('.mem-row[data-uid="u1"] button', { hasText: 'Quên' }).click();
+assert.equal(await p.locator('.mem-row').count(), 0);
+await p.evaluate((id) => window.__mgr.bots.get(id).memory.add('u2', 'Bình', 'có mèo'), mid);
+await T('#fPrompt').fill('Bạn là Ly phiên bản mới, hay mơ mộng.');
+await T('#reloadPrompt').click();
+assert.equal(await p.evaluate((id) => window.__mgr.bots.get(id).account.prompt, mid), 'Bạn là Ly phiên bản mới, hay mơ mộng.');
+assert.equal(await p.evaluate(() => window.__mgr.bots.get(window.__mgr.accounts[0].id) !== window.__b0), true, 'nạp lại prompt tạo bot mới');
+assert.equal(await p.locator('.mem-row').count(), 1, 'nạp lại prompt vẫn giữ ghi chú');
+p.once('dialog', (d) => d.accept());
+await T('#clearMemory').click();
+assert.equal(await p.locator('.mem-row').count(), 0);
+assert.deepEqual(await p.evaluate((id) => window.__mgr.memoryOf(id), mid), []);
 // 11) Quét model: chỉ model sống vào combo, model 404/không có hạn mức bị loại
 await p.evaluate(() => document.querySelectorAll('.sheet').forEach((x) => x.remove()));
 await T('#btnAccounts').click(); await T('.acc .meta').click();

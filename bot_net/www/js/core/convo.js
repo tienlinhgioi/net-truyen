@@ -26,5 +26,6 @@ export class UserMemory {
     this.m.set(uid, e);
   }
   get(uid) { return this.m.get(uid) || { name: '', notes: [] }; }
+  forget(uid) { this.m.delete(uid); }
   toJSON() { return Object.fromEntries(this.m); }
 }

@@ -34,3 +34,11 @@ test('UserMemory: xuất và khôi phục', () => {
   const k = UserMemory.from(m.toJSON());
   assert.deepEqual(k.get('u1').notes, ['x']);
 });
+
+test('UserMemory: quên một người', () => {
+  const m = new UserMemory();
+  m.add('u1', 'An', 'x'); m.add('u2', 'Bình', 'y');
+  m.forget('u1');
+  assert.deepEqual(m.get('u1').notes, []);
+  assert.deepEqual(m.get('u2').notes, ['y']);
+});
