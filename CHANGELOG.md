@@ -1,5 +1,10 @@
 # Net Vip - Lịch sử phiên bản
 
+## 1.0.9
+- Sửa lỗi Gửi ảnh và Gửi truyện: menu + bị đóng ngay vì app tự bấm "Xem ảnh" liên tục. Nay ảnh hiện trực tiếp, không giả lập bấm.
+- Gửi ảnh mở được thư viện ảnh của điện thoại.
+- Sửa lỗi kéo xem lịch sử chat bị tải lại trang: kéo trong danh sách chat không còn kích hoạt "kéo để làm mới".
+
 ## 1.0.8
 - Tên file APK kèm số phiên bản (net-vip-1.0.8.apk).
 

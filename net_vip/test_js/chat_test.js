@@ -7,7 +7,7 @@ const assert = require('assert');
   const b = await chromium.launch();
   const p = await b.newPage();
   await p.route('http://t.local/', r => r.fulfill({ contentType: 'text/html', body:
-    '<ul id="listMessages"><li><a class="btn btn-info" id="view-img-btn-1" onclick="window.clicked=1">Xem</a></li>' +
+    '<ul id="listMessages"><li><a class="btn btn-info" id="view-img-btn-1" onclick="window.clicked=1">Xem</a><img id="chat-img-1" style="display:none" src="x"></li>' +
     '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/1">A</a></div><p>xin chào</p></li>' +
     '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/1">A</a></div><p>tin 2</p></li>' +
     '<li><a class="avatar"></a><div class="info"><a class="name" href="/u/2">B</a></div><p>chữ <img id="chat-img-9" src="x"></p></li>' +
@@ -15,7 +15,7 @@ const assert = require('assert');
     '<div class="chat-board"><div class="form-group"><button id="btnMore">m</button><input id="txtMessage"></div></div>' }));
   await p.goto('http://t.local/');
   await p.evaluate(() => {
-    window.sent = []; window.webEnter = 0;
+    window.sent = []; window.webEnter = 0; window.docClicks = 0; document.addEventListener('click', () => window.docClicks++);
     window.$ = { post: (u, d, cb) => { window.sent.push(d.message); cb && cb({ status: true }); } };
     document.getElementById('txtMessage').addEventListener('keydown', e => { if (e.key === 'Enter') window.webEnter++; });
   });
@@ -52,6 +52,14 @@ const assert = require('assert');
   await p.waitForTimeout(200);
   assert.deepStrictEqual(await p.evaluate(() => window.alerts), ['Quá số lượng']);
   assert.strictEqual(await p.locator('#nvChips .chip').count(), 1, 'lỗi thì giữ chip');
+  // Tự hiện ảnh KHÔNG được phát sinh sự kiện click (web dùng click ngoài menu để đóng menu +)
+  await p.waitForTimeout(1700);
+  assert.strictEqual(await p.evaluate(() => getComputedStyle(document.getElementById('chat-img-1')).display), 'block', 'ảnh tự hiện');
+  assert.strictEqual(await p.evaluate(() => getComputedStyle(document.getElementById('view-img-btn-1')).display), 'none', 'nút Xem ảnh ẩn');
+  assert.strictEqual(await p.evaluate(() => window.clicked || 0), 0, 'không giả lập click vào nút Xem ảnh');
+  const dc = await p.evaluate(() => window.docClicks);
+  await p.waitForTimeout(1700);
+  assert.strictEqual(await p.evaluate(() => window.docClicks), dc, 'không có click giả nào lan lên trang (làm đóng menu +)');
   // Giao diện toàn màn hình: tiêu đề, nút gửi, gộp tin cùng người, tin chỉ có ảnh bỏ bong bóng
   await p.waitForTimeout(900);
   assert.strictEqual(await p.locator('#nvChatHeader .t').innerText(), 'Vạn Giới Đàm Đạo');

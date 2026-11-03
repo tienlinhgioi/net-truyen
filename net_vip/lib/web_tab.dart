@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'auth_sync.dart';
 import 'guest_redirect.dart';
@@ -85,7 +87,22 @@ class WebTabState extends State<WebTab> with AutomaticKeepAliveClientMixin {
           },
         ),
       );
+    // Cho phép trang mở hộp chọn ảnh (nút Gửi ảnh trong chat).
+    final platform = _c.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setOnShowFileSelector(_pickFiles);
+    }
     _load();
+  }
+
+  Future<List<String>> _pickFiles(FileSelectorParams params) async {
+    final picker = ImagePicker();
+    if (params.mode == FileSelectorMode.openMultiple) {
+      final files = await picker.pickMultiImage();
+      return [for (final f in files) Uri.file(f.path).toString()];
+    }
+    final f = await picker.pickImage(source: ImageSource.gallery);
+    return f == null ? [] : [Uri.file(f.path).toString()];
   }
 
   /// Mở một địa chỉ trong tab này (dùng cho menu Cộng đồng).
