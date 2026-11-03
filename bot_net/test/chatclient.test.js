@@ -58,3 +58,11 @@ test('parseProfile: lấy avatar và tên hiển thị từ trang hồ sơ', () 
   const html = '<img alt="" src="https://st.netcdn.one/a.jpg" class="avatar user-img" style="height:80px"><input type="text" name="user-name" value="Cô Bé Nhút Nhát" class="form-control">';
   assert.deepEqual(parseProfile(html), { avatar: 'https://st.netcdn.one/a.jpg', name: 'Cô Bé Nhút Nhát' });
 });
+
+test('searchManga: tìm truyện theo tên', async () => {
+  let body;
+  const http = fakeHttp({ 'POST /ajax/search': (r) => { body = r.data; return { status: 200, headers: {}, data: { list: [{ url: '/manga/one-piece', name: 'One Piece' }] } }; } });
+  const r = await new ChatClient({ http, base: BASE }).searchManga('one piece');
+  assert.match(body, /search=one\+piece/);
+  assert.deepEqual(r, [{ slug: 'one-piece', name: 'One Piece' }]);
+});

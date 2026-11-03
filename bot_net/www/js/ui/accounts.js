@@ -1,6 +1,6 @@
 // Danh sách tài khoản (bên phải) và màn sửa từng tài khoản.
 import { h, openSheet, avatarEl, switchEl, toast } from './dom.js';
-import { openModelPicker } from './models.js';
+import { comboEditor } from './combo.js';
 
 export function openAccounts(mgr) {
   openSheet({
@@ -47,9 +47,20 @@ function openAdd(mgr) {
 
 const maskKey = (k) => (k.length > 10 ? `${k.slice(0, 6)}…${k.slice(-4)}` : '••••');
 
+const keyBadge = (st) => {
+  if (!st) return null;
+  if (st.state === 'ok') return h('span', { class: 'badge ok', text: `Sống ${st.ms}ms` });
+  if (st.state === 'quota') return h('span', { class: 'badge warn', text: 'Hết hạn mức' });
+  if (st.state === 'invalid') return h('span', { class: 'badge bad', text: 'Sai key' });
+  if (st.state === 'model') return h('span', { class: 'badge warn', text: 'Key ok, model chết' });
+  return h('span', { class: 'badge bad', text: 'Lỗi mạng' });
+};
+
 export function openEditor(mgr, id) {
   const a = mgr.account(id);
   if (!a) return;
+  if (a.model && !(a.combo?.text || []).length) a.combo = { text: [a.model], image: a.combo?.image || [], vision: a.combo?.vision || [] };
+  a.combo ||= { text: [], image: [], vision: [] };
   openSheet({
     title: a.displayName || a.name || 'Tài khoản', side: 'right',
     build(body, close) {
@@ -60,8 +71,8 @@ export function openEditor(mgr, id) {
       const keyInput = h('input', { type: 'password', placeholder: 'Dán Gemini API key', id: 'keyInput', autocomplete: 'off' });
       const renderKeys = () => {
         keysBox.replaceChildren();
-        a.keys.forEach((k, i) => keysBox.append(h('div', { class: 'keyrow' },
-          h('span', { class: `tag ${i ? 'alt' : ''}`, text: i ? `Dự phòng ${i}` : 'Chính' }), h('code', { text: maskKey(k) }),
+        a.keys.forEach((k, i) => keysBox.append(h('div', { class: 'keyrow', 'data-key': i },
+          h('span', { class: `tag ${i ? 'alt' : ''}`, text: i ? `Dự phòng ${i}` : 'Chính' }), h('code', { text: maskKey(k) }), keyBadge(mgr.keyStatus[k]),
           h('button', { class: 'link', text: 'Xóa', onclick: () => { save({ keys: a.keys.filter((_, j) => j !== i) }); renderKeys(); } }))));
       };
       renderKeys();
@@ -72,9 +83,16 @@ export function openEditor(mgr, id) {
         save({ keys: [...a.keys, v] }); keyInput.value = ''; renderKeys();
         toast(a.keys.length === 1 ? 'Đã lưu key chính' : 'Đã thêm key dự phòng');
       } });
+      const checkAll = h('button', { class: 'btn ghost', id: 'keyCheckAll', text: 'Kiểm tra tất cả key', onclick: async () => {
+        if (!a.keys.length) return toast('Chưa có key nào');
+        checkAll.disabled = true; checkAll.textContent = 'Đang kiểm tra...';
+        await mgr.checkAllKeys(a.keys, a.combo.text[0] || mgr.settings.model || '');
+        checkAll.disabled = false; checkAll.textContent = 'Kiểm tra tất cả key'; renderKeys();
+        const ok = a.keys.filter((k) => mgr.keyStatus[k]?.state === 'ok').length;
+        toast(`${ok}/${a.keys.length} key đang sống`);
+      } });
 
-      const modelBtn = h('button', { class: 'btn ghost', id: 'modelBtn', text: `Mô hình: ${a.model || mgr.settings.model || 'chưa chọn (bấm để chọn)'}`,
-        onclick: () => openModelPicker(mgr, { keys: a.keys, current: a.model || mgr.settings.model, onPick: (m) => { save({ model: m }); modelBtn.textContent = `Mô hình: ${m}`; } }) });
+      const combo = comboEditor(mgr, { combo: a.combo, keys: () => a.keys, onChange: () => save({ combo: a.combo, model: a.combo.text[0] || '' }) });
 
       const field = (label, el) => h('label', { class: 'f' }, label, el);
       const cmd = h('input', { type: 'text', value: a.command, id: 'fCmd', onchange: (e) => save({ command: e.target.value.trim() || '/ai' }) });
@@ -83,6 +101,15 @@ export function openEditor(mgr, id) {
       const pr = h('textarea', { id: 'fPrompt', placeholder: 'Sơ yếu lý lịch, tính cách, cách xưng hô, sở thích... của tài khoản này', onchange: (e) => save({ prompt: e.target.value }) });
       pr.value = a.prompt;
       const mx = h('input', { type: 'number', min: 0, value: a.maxChars, id: 'fMax', onchange: (e) => save({ maxChars: Math.max(0, Number(e.target.value) || 0) }) });
+
+      // ---- Sticker ----
+      const packsBox = h('div', { class: 'chips', id: 'packs' });
+      const renderPacks = () => {
+        packsBox.replaceChildren(...mgr.stickers.map((p) => h('button', { class: `chip ${a.stickerPacks.includes(p.id) ? 'on' : ''}`, 'data-pack': p.id, text: p.name, onclick: () => {
+          save({ stickerPacks: a.stickerPacks.includes(p.id) ? a.stickerPacks.filter((x) => x !== p.id) : [...a.stickerPacks, p.id] }); renderPacks();
+        } })));
+      };
+      renderPacks();
 
       // ---- Chat thử ----
       const ans = h('div', { class: 'ans', style: 'display:none' });
@@ -95,13 +122,23 @@ export function openEditor(mgr, id) {
       } });
 
       const st = a.stats || {};
+      const refresh = h('button', { class: 'btn ghost', id: 'refreshProfile', text: 'Làm mới hồ sơ (avatar, tên)', onclick: async () => {
+        refresh.disabled = true;
+        try { toast((await mgr.refreshProfile(id)) ? 'Đã cập nhật avatar/tên' : 'Hồ sơ không thay đổi'); } catch (e) { toast(e.message); }
+        refresh.disabled = false;
+      } });
       body.append(
-        h('div', { class: 'row' }, avatarEl(a), h('div', { class: 'meta' }, h('b', { text: a.displayName || a.name }), h('div', { class: 'muted', text: `${a.email} · đã gửi ${st.sent || 0}, lỗi ${st.errors || 0}` })),
+        h('div', { class: 'row' }, avatarEl(a, 'av sm'), h('div', { class: 'meta' }, h('b', { text: a.displayName || a.name }), h('div', { class: 'muted', text: `${a.email} · đã gửi ${st.sent || 0}, lỗi ${st.errors || 0}` })),
           h('span', { style: 'margin-left:auto' }, switchEl(mgr.isRunning(id), (on) => mgr.setEnabled(id, on)))),
-        h('div', { class: 'sec' }, h('h3', { text: 'Gemini API' }), keyInput, addKey, keysBox, modelBtn),
+        refresh,
+        h('div', { class: 'sec' }, h('h3', { text: 'Gemini API' }), keyInput, addKey, keysBox, checkAll),
+        h('div', { class: 'sec' }, h('h3', { text: 'Combo model' }), combo),
         h('div', { class: 'sec' }, h('h3', { text: 'Nhận diện' }),
           field('Lệnh gọi (đặt ở đầu hoặc trong tin nhắn)', cmd), field('Tên gọi', nm), field('Tên gọi khác, ghi chú tìm kiếm thông minh (cách nhau dấu phẩy)', al)),
         h('div', { class: 'sec' }, h('h3', { text: 'Hồ sơ và prompt' }), pr, field('Giới hạn ký tự trả lời (0 = theo cài đặt chung)', mx)),
+        h('div', { class: 'sec' }, h('h3', { text: 'Hành vi' }),
+          h('div', { class: 'sw-row' }, h('span', { text: 'Thỉnh thoảng tự chen vào trò chuyện' }), switchEl(a.proactive !== false, (on) => save({ proactive: on }))),
+          h('span', { class: 'muted', text: 'Bộ sticker tài khoản này được dùng' }), packsBox),
         h('div', { class: 'sec chat-test' }, h('h3', { text: 'Thử' }), tin, tbtn, ans),
         h('button', { class: 'btn danger', id: 'delAcc', text: 'Xóa tài khoản', onclick: async () => { if (confirm('Xóa tài khoản này khỏi Bot Net?')) { await mgr.removeAccount(id); close(); } } }));
     },

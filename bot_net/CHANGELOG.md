@@ -1,5 +1,16 @@
 # Bot Net - Lịch sử phiên bản
 
+## 1.0.2
+- Phản hồi nhanh hơn: hỏi Gemini ngay khi có người gọi, thời gian "gõ" tính chồng lên thời gian chờ; quét chat 1,5 giây (1 giây khi đang trò chuyện); delay chat mặc định là khoảng cách tối thiểu giữa 2 tin.
+- Combo model: mỗi vai (chat chữ, tạo ảnh, hiểu ảnh) có nhiều model theo thứ tự ưu tiên, thêm nhiều model cùng lúc hoặc tự gõ tên; kiểm tra model sống, tự bỏ qua model chết, hết hạn mức model này thì dùng model kế.
+- Kiểm tra đồng loạt API key (từng tài khoản hoặc tất cả): sống, hết hạn mức, sai key.
+- Gửi sticker, gửi truyện (thẻ truyện như nút Gửi truyện của web) và tạo ảnh rồi gửi; ảnh có giới hạn mỗi ngày và thời gian chờ giữa hai ảnh. Cần nhập khóa imgbb của bạn để gửi ảnh.
+- Tiếp tục cuộc trò chuyện sau khi đã nói chuyện với một người (mặc định 3 phút), nhớ ghi chú về từng người, thỉnh thoảng tự chen vào tin của người khác (có xác suất và giới hạn mỗi giờ), tự mở chủ đề khi phòng vắng (tùy chọn).
+- Nhắn như người thật: tâm trạng theo giờ, độ trễ gõ theo độ dài, tách tin dài thành 2 tin, tránh lặp câu, bỏ qua cãi vã và từ nhạy cảm.
+- Avatar và tên tự cập nhật theo tài khoản (mỗi 30 phút, theo tin trong chat, hoặc nút Làm mới hồ sơ). Avatar trong màn sửa nhỏ lại thành khung tròn.
+- Sửa lỗi crash khi kéo thanh độ mờ (không còn gọi lại dịch vụ nền liên tục). Thêm thanh độ mờ khung và làm mờ kính.
+- Nút Dừng tất cả (bật lại một chạm), báo cáo theo ngày, cảnh báo khi hết API key.
+
 ## 1.0.1
 - Bản đầu tiên: bot chat Gemini cho NetTruyen, nhiều tài khoản chạy cùng lúc.
 - Quản lý tài khoản (bên phải): thêm/đăng nhập nhiều tài khoản, bật/tắt từng tài khoản, sửa riêng từng tài khoản.

@@ -65,3 +65,26 @@ test('listModels: chỉ mô hình hỗ trợ generateContent, kèm giới hạn 
   assert.deepEqual(m.map((x) => x.id), ['gemini-a']);
   assert.equal(m[0].inputTokenLimit, 1000);
 });
+
+test('buildRequest: chế độ json và chế độ ảnh', () => {
+  const j = buildRequest({ model: 'm', key: 'K', system: '', context: [], question: 'q', json: true });
+  assert.equal(j.data.generationConfig.responseMimeType, 'application/json');
+  const i = buildRequest({ model: 'm', key: 'K', system: '', context: [], question: 'q', image: true });
+  assert.deepEqual(i.data.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
+  assert.equal(i.data.generationConfig.responseMimeType, undefined);
+});
+
+test('generate: mode image trả về ảnh', async () => {
+  const pool = new KeyPool(['A']);
+  const http = async () => ({ status: 200, data: { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'QUJD' } }] } }], usageMetadata: { totalTokenCount: 9 } } });
+  const r = await generate({ http, pool, model: 'img', system: '', context: [], question: 'vẽ mèo', mode: 'image', sleep: async () => {} });
+  assert.equal(r.image.data, 'QUJD');
+});
+
+test('generate: mode json không cắt ký tự (việc cắt làm sau khi đọc JSON)', async () => {
+  const pool = new KeyPool(['A']);
+  const longJson = JSON.stringify({ reply: 'x'.repeat(300) });
+  const http = async () => ok(longJson);
+  const r = await generate({ http, pool, model: 'm', system: '', context: [], question: 'q', mode: 'json', maxChars: 50, sleep: async () => {} });
+  assert.equal(r.text, longJson);
+});

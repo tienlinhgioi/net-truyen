@@ -8,34 +8,39 @@ export class KeyPool {
     this.keys = keys.filter(Boolean);
     this.now = now;
     this.cooldownMs = cooldownMs;
-    this.state = new Map(this.keys.map((k) => [k, { until: 0, dead: false }]));
+    this.state = new Map(this.keys.map((k) => [k, { until: 0, dead: false, mu: {} }]));
     this.usageData = {};
   }
 
   setCooldown(ms) { this.cooldownMs = ms; }
 
-  /** Key đang dùng được (ưu tiên theo thứ tự), hoặc null. */
-  current() {
+  /** Key đang dùng được (ưu tiên theo thứ tự) cho [model], hoặc null. */
+  current(model) {
     const t = this.now();
     for (const k of this.keys) {
       const s = this.state.get(k);
-      if (!s.dead && s.until <= t) return k;
+      if (!s.dead && s.until <= t && (!model || (s.mu[model] || 0) <= t)) return k;
     }
     return null;
   }
 
-  /** 'invalid' = key sai, loại hẳn; lý do khác = nghỉ một lúc rồi thử lại. */
-  fail(key, reason) {
+  /** 'invalid' = key sai, loại hẳn. 'quota' kèm [model] = chỉ khóa model đó (hạn mức tính theo model). */
+  fail(key, reason, model) {
     const s = this.state.get(key);
     if (!s) return;
     if (reason === 'invalid') s.dead = true;
+    else if (reason === 'quota' && model) s.mu[model] = this.now() + this.cooldownMs;
     else s.until = this.now() + this.cooldownMs;
   }
 
-  /** Thời điểm sớm nhất có key dùng lại được (null nếu không còn key nào). */
-  retryAt() {
+  /** Thời điểm sớm nhất có key dùng lại được cho [model] (null nếu không còn key nào). */
+  retryAt(model) {
     let best = null;
-    for (const s of this.state.values()) if (!s.dead && (best === null || s.until < best)) best = s.until;
+    for (const s of this.state.values()) {
+      if (s.dead) continue;
+      const t = Math.max(s.until, model ? s.mu[model] || 0 : 0);
+      if (best === null || t < best) best = t;
+    }
     return best;
   }
 

@@ -3,16 +3,18 @@ import { Manager } from './manager.js';
 import { h, avatarEl, fmtTime, initials } from './ui/dom.js';
 import { openAccounts } from './ui/accounts.js';
 import { openSettings } from './ui/settings.js';
+import { openReport } from './ui/report.js';
 
 const mock = window.__BOTNET_TEST__; // dùng khi chạy test giao diện
 const mgr = await new Manager({
-  adapter: mock?.adapter || storage, http: mock?.http || http, service: mock ? null : (isNative() ? service : null), sleep: mock?.sleep,
+  adapter: mock?.adapter || storage, http: mock?.http || http, service: mock ? (mock.service || null) : (isNative() ? service : null), sleep: mock?.sleep, loadStickers: mock?.stickers || (() => fetch('data/stickers.json').then((r) => r.json())),
 }).init();
 window.__mgr = mgr;
 
 function applyTheme() {
   const s = mgr.settings, r = document.documentElement.style;
   r.setProperty('--bg', s.bg); r.setProperty('--accent', s.accent); r.setProperty('--dim', s.wallpaperDim);
+  r.setProperty('--pa', s.panelAlpha); r.setProperty('--blur', `${s.wallpaperBlur}px`);
   const wall = document.getElementById('wall');
   wall.style.backgroundImage = s.wallpaper ? `url(${s.wallpaper})` : '';
   document.body.classList.toggle('has-wall', !!s.wallpaper);
@@ -28,6 +30,9 @@ function renderStage() {
     const ring = h('div', { class: 'ring', 'data-id': a.id }, a.avatar ? h('img', { src: a.avatar, alt: '' }) : h('div', { class: 'ph', text: initials(a.displayName || a.name) }));
     stage.append(h('div', { class: 'bubble' }, ring, h('div', { class: 'nm', text: a.displayName || a.name }), h('div', { class: 'st', text: `Đã gửi ${a.stats?.sent || 0}` })));
   }
+  const pause = document.getElementById('btnPause');
+  pause.textContent = run.length ? '⏸ Dừng tất cả' : (mgr.paused.length ? '▶ Bật lại' : '⏸ Dừng tất cả');
+  pause.disabled = !run.length && !mgr.paused.length;
   document.getElementById('runInfo').textContent = run.length ? `${run.length} tài khoản đang chạy` : 'Chưa có tài khoản chạy';
   const first = run[0] || mgr.accounts[0];
   const who = document.getElementById('btnAccounts');
@@ -55,6 +60,8 @@ mgr.on((type, data) => {
 
 document.getElementById('btnSettings').onclick = () => openSettings(mgr, applyTheme);
 document.getElementById('btnAccounts').onclick = () => openAccounts(mgr);
+document.getElementById('btnReport').onclick = () => openReport(mgr);
+document.getElementById('btnPause').onclick = () => { if (mgr.runningAccounts().length) { mgr.pauseAll(); } else { mgr.resumeAll(); } renderStage(); };
 document.getElementById('btnClearLog').onclick = () => mgr.clearLogs();
 applyTheme(); renderStage(); mgr.logs.forEach(addLog);
 

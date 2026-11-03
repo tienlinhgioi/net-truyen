@@ -47,6 +47,13 @@ export class ChatClient {
     return d.data || [];
   }
 
+  /** Tìm truyện theo tên (như ô tìm kiếm của nút Gửi truyện). */
+  async searchManga(q) {
+    const r = await this.#req('POST', '/ajax/search', { search: q });
+    const d = json(r.data);
+    return (d.list || []).map((m) => ({ slug: String(m.url || '').split('/manga/')[1] || '', name: m.name })).filter((m) => m.slug);
+  }
+
   async sendChat(message) {
     const r = await this.#req('POST', '/ajax/chat/send', { message, reply_id: '' });
     const d = json(r.data);
