@@ -56,7 +56,7 @@ const main = async () => {
   console.log(`Web: ${config.web} | ${accounts.length} tài khoản | ${links.length} truyện | ${loops === Infinity ? 'chạy vô hạn' : loops + ' vòng'} (Ctrl+C để dừng)`);
   await Promise.all(accounts.map((account) => readAccount({
     site: new Site({ web: config.web, timeoutMs: config.delay.requestTimeoutMs, signal: ac.signal }),
-    account, links, delay: config.delay, order: config.order, loops,
+    account, links, delay: config.delay, order: config.order, parallel: config.parallel, loops,
     log: makeLog(account.email.split('@')[0]), signal: ac.signal,
   }).catch((e) => makeLog(account.email)(`Dừng do lỗi: ${e.message}`))));
   console.log('Đã dừng.');

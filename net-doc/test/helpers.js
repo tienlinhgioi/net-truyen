@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function fakeSite({ chapters = [1, 2, 3], accounts = { 'a@x.com': 'pw', 'b@x.com': 'pw' }, viewStatus = 200, viewBody = '{"status":true,"counted":true}', loginOk = () => true } = {}) {
+export function fakeSite({ chapters = [1, 2, 3], accounts = { 'a@x.com': 'pw', 'b@x.com': 'pw' }, viewStatus = 200, viewBody = '{"status":true,"counted":true}', loginOk = () => true, pageDelayMs = 0 } = {}) {
   const log = { hits: [], views: [], logins: [] };
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -21,7 +21,7 @@ export function fakeSite({ chapters = [1, 2, 3], accounts = { 'a@x.com': 'pw', '
     }
     if (url.pathname === '/manga/truyen-a') return send(200, `<html>MANGA_ID = 7; ${[...chapters].reverse().map((n) => `<a href="/manga/truyen-a/chapter-${n}">c${n}</a>`).join('')} <a href="/manga/khac/chapter-9">x</a></html>`);
     const m = /^\/manga\/truyen-a\/chapter-(.+)$/.exec(url.pathname);
-    if (m) return send(200, `<html>MANGA_ID = 7; CHAPTER_ID = 9${m[1].replace(/\D/g, '')};</html>`);
+    if (m) { if (pageDelayMs) await wait(pageDelayMs); return send(200, `<html>MANGA_ID = 7; CHAPTER_ID = 9${m[1].replace(/\D/g, '')};</html>`); }
     if (url.pathname === '/ajax/manga/view') {
       const f = new URLSearchParams(body);
       log.views.push({ manga: f.get('manga'), chapter: f.get('chapter'), referer: req.headers.referer, cookie, t: Date.now(), who: /UserID=([^;]+)/.exec(cookie)?.[1] });

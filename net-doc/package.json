@@ -1,6 +1,6 @@
 {
   "name": "net-doc",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Tool Node.js tự động đọc truyện NetTruyen, chạy trên Termux",
   "type": "module",

@@ -9,7 +9,7 @@ import { writeFileSync, mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const fast = { viewWaitMs: 30, betweenChaptersMs: 5, betweenLoopsMs: 40, jitterPercent: 0, requestTimeoutMs: 2000, retryLoginMs: 30, reloginEveryMs: 1e9 };
+const fast = { viewWaitMs: 30, betweenChaptersMs: 5, betweenLoopsMs: 40, jitterPercent: 0, requestTimeoutMs: 2000, retryLoginMs: 30, retryPageMs: 5, reloginEveryMs: 1e9 };
 const quiet = () => {};
 
 test('slugOf: lấy mã truyện từ link (có/không có chương, có tham số)', () => {
@@ -42,7 +42,7 @@ test('loadConfig: chưa có data.json thì tạo bản mẫu và báo; có thì 
   const f = join(dir, 'data.json');
   const r = loadConfig(f);
   assert.equal(r.created, true); assert.ok(existsSync(f));
-  assert.equal(JSON.parse(readFileSync(f, 'utf8')).delay.viewWaitMs, 7500);
+  assert.equal(loadConfig(f).config.delay.viewWaitMs, 7500, 'bản mẫu (có ghi chú) đọc lại được');
   writeFileSync(f, JSON.stringify({ web: 'https://w.com', accounts: [{ email: 'a@b.c', password: 'p' }], delay: { viewWaitMs: 9000 } }));
   const c = loadConfig(f).config;
   assert.equal(c.delay.viewWaitMs, 9000); assert.equal(c.delay.betweenChaptersMs, DEFAULT_CONFIG.delay.betweenChaptersMs, 'trường thiếu lấy mặc định');
@@ -102,16 +102,81 @@ test('KHÔNG kiểm tra thành công: máy chủ báo lỗi hay từ chối vẫ
   }
 });
 
-test('trang chương lỗi/treo cũng không làm dừng: bỏ qua và đọc tiếp', async () => {
-  const s = await fakeSite({ chapters: [1, 2, 3] });
+test('trang chương lỗi/treo: thử lại, nếu vẫn lỗi thì bỏ qua và đọc tiếp', async () => {
+  const run = async (failTimes) => {
+    const s = await fakeSite({ chapters: [1, 2, 3] });
+    try {
+      const site = new Site({ web: s.url, timeoutMs: 300 });
+      const real = site.getText.bind(site);
+      let n = 0;
+      site.getText = async (p) => { if (p.includes('chapter-2') && n++ < failTimes) throw new Error('timeout giả'); return real(p); };
+      await readAccount({ site, account: { email: 'a@x.com', password: 'pw' }, links: [`${s.url}/manga/truyen-a`], delay: fast, loops: 1, log: quiet });
+      return s.log.views.map((v) => v.chapter);
+    } finally { await s.close(); }
+  };
+  assert.deepEqual(await run(1), ['91', '92', '93'], 'lỗi 1 lần: thử lại được thì vẫn đọc chương đó');
+  assert.deepEqual(await run(2), ['91', '92', '93'], 'lỗi 2 lần: vẫn thử lại (tối đa 3 lần)');
+  assert.deepEqual(await run(99), ['91', '93'], 'lỗi mãi: bỏ qua chương, đọc tiếp');
+});
+
+test('chờ viewWaitMs tính từ lúc MỞ trang chương (không cộng thêm thời gian tải trang)', async () => {
+  const s = await fakeSite({ chapters: [1], pageDelayMs: 80 });
   try {
-    const site = new Site({ web: s.url, timeoutMs: 300 });
-    const real = site.getText.bind(site);
-    let n = 0;
-    site.getText = async (p) => { if (p.includes('chapter-2') && n++ === 0) throw new Error('timeout giả'); return real(p); };
-    await readAccount({ site, account: { email: 'a@x.com', password: 'pw' }, links: [`${s.url}/manga/truyen-a`], delay: fast, loops: 1, log: quiet });
-    assert.deepEqual(s.log.views.map((v) => v.chapter), ['91', '93']);
+    await readAccount({ site: new Site({ web: s.url, timeoutMs: 2000 }), account: { email: 'a@x.com', password: 'pw' }, links: [`${s.url}/manga/truyen-a`], delay: { ...fast, viewWaitMs: 120 }, loops: 1, log: quiet });
+    const dt = s.log.views[0].t - s.log.hits.find((h) => h.path === '/manga/truyen-a/chapter-1').t;
+    assert.ok(dt >= 115, `không gửi sớm hơn viewWaitMs (dt=${dt})`);
+    assert.ok(dt < 120 + 60, `không chờ thêm sau khi trang tải xong (dt=${dt})`);
   } finally { await s.close(); }
+});
+
+test('jitter chỉ kéo dài viewWaitMs, không bao giờ rút ngắn (web cần đủ 7 giây)', async () => {
+  const s = await fakeSite({ chapters: [1, 2, 3, 4, 5, 6, 7, 8] });
+  try {
+    await readAccount({ site: new Site({ web: s.url, timeoutMs: 2000 }), account: { email: 'a@x.com', password: 'pw' }, links: [`${s.url}/manga/truyen-a`], delay: { ...fast, viewWaitMs: 60, jitterPercent: 80 }, parallel: 4, loops: 1, log: quiet });
+    assert.equal(s.log.views.length, 8);
+    for (const v of s.log.views) {
+      const dt = v.t - s.log.hits.find((h) => h.path === `/manga/truyen-a/chapter-${v.chapter.slice(1)}`).t;
+      assert.ok(dt >= 57, `chương ${v.chapter} gửi sau ${dt}ms < 60ms`);
+    }
+  } finally { await s.close(); }
+});
+
+test('đọc song song (parallel): nhanh hơn tuần tự nhưng vẫn đủ chương và mỗi chương vẫn chờ đủ', async () => {
+  const run = async (parallel) => {
+    const s = await fakeSite({ chapters: [1, 2, 3, 4, 5, 6] });
+    try {
+      const t0 = Date.now();
+      await readAccount({ site: new Site({ web: s.url, timeoutMs: 2000 }), account: { email: 'a@x.com', password: 'pw' }, links: [`${s.url}/manga/truyen-a`], delay: { ...fast, viewWaitMs: 100, betweenChaptersMs: 10 }, parallel, loops: 1, log: quiet });
+      const dt = Date.now() - t0;
+      for (const v of s.log.views) assert.ok(v.t - s.log.hits.find((h) => h.path === `/manga/truyen-a/chapter-${v.chapter.slice(1)}`).t >= 95);
+      return { dt, chapters: s.log.views.map((v) => v.chapter) };
+    } finally { await s.close(); }
+  };
+  const seq = await run(1), par = await run(3);
+  assert.deepEqual(seq.chapters, ['91', '92', '93', '94', '95', '96']);
+  assert.deepEqual(par.chapters, ['91', '92', '93', '94', '95', '96'], 'song song vẫn đúng thứ tự mở chương');
+  assert.ok(seq.dt >= 600, `tuần tự mất >= 600ms (${seq.dt})`);
+  assert.ok(par.dt < seq.dt * 0.6, `song song nhanh hơn rõ rệt (${par.dt} vs ${seq.dt})`);
+});
+
+test('data.json cho phép ghi chú // và /* */; không phá chuỗi chứa //; bản mẫu có ghi chú', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nd-'));
+  const f = join(dir, 'data.json');
+  writeFileSync(f, `{
+  // link web
+  "web": "https://w.com", /* không được cắt chuỗi có // */
+  "accounts": [{ "email": "a@b.c", "password": "p//q", "enabled": true }], // hết
+  "parallel": 2
+}`);
+  const c = loadConfig(f).config;
+  assert.equal(c.web, 'https://w.com'); assert.equal(c.accounts[0].password, 'p//q'); assert.equal(c.parallel, 2);
+  assert.equal(c.delay.viewWaitMs, 7500, 'thiếu delay lấy mặc định');
+  const g = join(dir, 'moi.json');
+  loadConfig(g);
+  const text = readFileSync(g, 'utf8');
+  assert.match(text, /\/\/.*viewWaitMs|viewWaitMs.*\/\//s, 'bản mẫu giải thích viewWaitMs');
+  assert.ok((text.match(/^\s*\/\//gm) || []).length >= 12, 'bản mẫu có nhiều dòng ghi chú');
+  assert.equal(loadConfig(g).config.parallel, DEFAULT_CONFIG.parallel);
 });
 
 test('đăng nhập thất bại thì thử lại sau retryLoginMs (không thoát), rồi đọc khi đăng nhập được', async () => {

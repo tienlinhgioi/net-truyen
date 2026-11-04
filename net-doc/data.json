@@ -1,21 +1,65 @@
 {
+  // ====== net-doc: cấu hình ======
+  // Dòng bắt đầu bằng // là ghi chú, tool bỏ qua. Sửa xong lưu file rồi chạy lại.
+  // Thời gian tính bằng mili giây: 1000 = 1 giây.
+
+  // Link web NetTruyen (đổi sang tên miền khác nếu web đổi).
   "web": "https://nettruyen15s.com",
+
+  // Danh sách tài khoản dùng để đọc. Nhiều tài khoản thì chạy song song, mỗi tài khoản đăng nhập riêng.
+  //   email, password : tài khoản đăng nhập web
+  //   enabled         : true = dùng, false = tạm tắt tài khoản này
+  // Muốn thêm tài khoản: copy nguyên một khối { ... }, thêm dấu phẩy giữa các khối.
+  // (Mật khẩu lưu chữ thường trong file này, đừng chia sẻ file.)
   "accounts": [
-    {
-      "email": "ban@example.com",
-      "password": "matkhau",
-      "enabled": true
-    }
+    { "email": "ban@example.com", "password": "matkhau", "enabled": true }
   ],
+
+  // Thứ tự đọc chương:
+  //   "asc"    = từ chương đầu lên chương mới nhất
+  //   "desc"   = từ chương mới nhất xuống chương đầu
+  //   "random" = ngẫu nhiên
   "order": "asc",
+
+  // Số chương mỗi tài khoản đọc CÙNG LÚC (mở sẵn chương kế trong lúc chờ chương trước).
+  // Lớn hơn = nhanh hơn. 1 = tuần tự từng chương. Gợi ý 2 đến 4; quá cao dễ bị web chặn/lỗi.
+  "parallel": 3,
+
+  // (Tùy chọn) link truyện mặc định, ví dụ ["https://nettruyen15s.com/manga/ten-truyen"].
+  // Khi tool hỏi link mà bạn chỉ bấm Enter, tool dùng danh sách này.
   "manga": [],
+
+  // Các mức chờ (mili giây).
+  //
+  // Mỗi chương diễn ra như sau:
+  //   mở trang chương -> chờ viewWaitMs -> gửi lượt đọc
+  //   rồi cách betweenChaptersMs thì mở chương kế (không cần chờ chương trước xong nếu parallel > 1)
+  //   hết truyện -> nghỉ betweenLoopsMs -> đọc lại từ đầu
   "delay": {
+    // Chờ bao lâu SAU KHI mở trang chương rồi mới gửi lượt đọc. Web chỉ tính lượt đọc khi đã đủ 7 giây
+    // kể từ lúc mở trang, nên KHÔNG để dưới 7000 (mặc định 7500 là vừa đủ, an toàn).
     "viewWaitMs": 7500,
-    "betweenChaptersMs": 2000,
+
+    // Cách bao lâu thì mở chương kế tiếp. Nhỏ hơn = nhanh hơn (nhưng dễ bị web chặn).
+    "betweenChaptersMs": 1500,
+
+    // Đọc hết truyện thì nghỉ bao lâu rồi đọc lại từ chương đầu.
     "betweenLoopsMs": 60000,
-    "jitterPercent": 20,
-    "requestTimeoutMs": 15000,
+
+    // Lệch ngẫu nhiên % cho các mức chờ để nhịp không đều như máy. Riêng viewWaitMs chỉ lệch THÊM (không bao giờ ngắn hơn).
+    // 0 = tắt lệch.
+    "jitterPercent": 10,
+
+    // Mỗi yêu cầu tới web chờ tối đa bao lâu. Mạng chậm/web chậm thì tăng lên (ví dụ 30000).
+    "requestTimeoutMs": 20000,
+
+    // Tải trang chương bị lỗi/quá thời gian thì chờ bao lâu rồi thử lại (thử lại tối đa 2 lần, sau đó bỏ qua chương).
+    "retryPageMs": 1500,
+
+    // Đăng nhập thất bại (sai mật khẩu, mất mạng) thì chờ bao lâu rồi thử lại. Thử mãi cho tới khi được.
     "retryLoginMs": 30000,
+
+    // Đăng nhập lại sau mỗi chừng này để phiên không hết hạn khi chạy lâu (21600000 = 6 giờ).
     "reloginEveryMs": 21600000
   }
 }
