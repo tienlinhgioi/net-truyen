@@ -1,0 +1,13 @@
+{
+  "name": "net-doc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tool Node.js tự động đọc truyện NetTruyen, chạy trên Termux",
+  "type": "module",
+  "bin": { "net-doc": "index.js" },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18.14" }
+}

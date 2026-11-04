@@ -1,0 +1,21 @@
+{
+  "web": "https://nettruyen15s.com",
+  "accounts": [
+    {
+      "email": "ban@example.com",
+      "password": "matkhau",
+      "enabled": true
+    }
+  ],
+  "order": "asc",
+  "manga": [],
+  "delay": {
+    "viewWaitMs": 7500,
+    "betweenChaptersMs": 2000,
+    "betweenLoopsMs": 60000,
+    "jitterPercent": 20,
+    "requestTimeoutMs": 15000,
+    "retryLoginMs": 30000,
+    "reloginEveryMs": 21600000
+  }
+}
