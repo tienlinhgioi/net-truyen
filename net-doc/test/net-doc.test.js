@@ -209,3 +209,130 @@ test('dừng được bất cứ lúc nào bằng AbortSignal, kể cả khi đa
     assert.ok(Date.now() - t0 < 500, 'dừng ngay, không chờ hết 5 giây');
   } finally { await s.close(); }
 });
+
+// ===================== 1.0.2: ba chế độ chọn truyện + điều kiện đổi truyện =====================
+import { parseStoryList, parseLastPage } from '../src/parse.js';
+
+const rule = { window: 4, alreadyReadPercent: 75 }; // trong 4 chương gần nhất, >= 3 chương "đã đọc" thì đổi truyện
+const slugsOf = (s) => [...new Set(s.log.views.map((v) => v.slug))];
+const run = (s, over = {}) => readAccount({ site: new Site({ web: s.url, timeoutMs: 2000 }), account: { email: 'a@x.com', password: 'pw' }, links: [], delay: fast, loops: 1, log: quiet, switchRule: rule, ...over });
+
+test('parseStoryList: lấy mã truyện theo thứ tự trên trang, bỏ trùng, bỏ sidebar; parseLastPage: số trang cuối', () => {
+  const html = '<div class="side"><a href="/manga/side">s</a></div><div class="items"><a href="/manga/b"><img></a><a title="B" href="/manga/b">B</a><a href="https://w.com/manga/a">A</a><a href="/manga/c/chapter-5">c5</a></div><a href="/danh-sach-truyen/562?sort=views_day">»</a><a href="/danh-sach-truyen/2">2</a>';
+  assert.deepEqual(parseStoryList(html), ['b', 'a', 'c']);
+  assert.equal(parseLastPage(html), 562);
+  assert.equal(parseLastPage('không có'), 1);
+});
+
+test('đổi truyện: gặp nhiều chương "đã đọc" (counted:false) thì sang truyện kế, không đọc hết truyện', async () => {
+  const s = await fakeSite({ stories: { 'truyen-a': Array.from({ length: 30 }, (_, i) => i + 1), 'truyen-b': [1, 2, 3] }, countedFn: (slug) => slug !== 'truyen-a' });
+  try {
+    await run(s, { links: [`${s.url}/manga/truyen-a`, `${s.url}/manga/truyen-b`] });
+    const a = s.log.views.filter((v) => v.slug === 'truyen-a').length;
+    assert.ok(a >= 4 && a <= 8, `truyen-a toàn "đã đọc": chỉ đọc vài chương rồi đổi, thực tế ${a}`);
+    assert.equal(s.log.views.filter((v) => v.slug === 'truyen-b').length, 3, 'truyen-b đọc đủ');
+  } finally { await s.close(); }
+});
+
+test('đổi truyện: chương "đã đọc" ít hơn ngưỡng thì vẫn đọc hết truyện; invalid/lỗi không tính là "đã đọc"', async () => {
+  const s = await fakeSite({ stories: { 'truyen-a': Array.from({ length: 12 }, (_, i) => i + 1) }, countedFn: (slug, n) => n % 3 !== 0 }); // 1/3 chương "đã đọc"
+  try {
+    await run(s, { links: [`${s.url}/manga/truyen-a`] });
+    assert.equal(s.log.views.length, 12, 'dưới ngưỡng: đọc đủ 12 chương');
+  } finally { await s.close(); }
+  const s2 = await fakeSite({ stories: { 'truyen-a': Array.from({ length: 12 }, (_, i) => i + 1) }, viewBody: '{"message":"invalid request","status":false}' });
+  try {
+    await run(s2, { links: [`${s2.url}/manga/truyen-a`] });
+    assert.equal(s2.log.views.length, 12, 'web từ chối (invalid) không bị hiểu là "đã đọc"');
+  } finally { await s2.close(); }
+});
+
+test('mode list: các link đọc tuần tự theo đúng thứ tự cấu hình, hết thì lặp lại từ link 1', async () => {
+  const s = await fakeSite({ stories: { 'truyen-a': [1], 'truyen-b': [1], 'truyen-c': [1] } });
+  try {
+    await run(s, { mode: 'list', loops: 2, links: [`${s.url}/manga/truyen-c`, `${s.url}/manga/truyen-a`, `${s.url}/manga/truyen-b`] });
+    assert.deepEqual(s.log.views.map((v) => v.slug), ['truyen-c', 'truyen-a', 'truyen-b', 'truyen-c', 'truyen-a', 'truyen-b']);
+  } finally { await s.close(); }
+});
+
+test('mode random (có link): đọc đủ mọi truyện nhưng thứ tự được trộn mỗi vòng', async () => {
+  const names = ['t1', 't2', 't3', 't4', 't5', 't6'];
+  const s = await fakeSite({ stories: Object.fromEntries(names.map((n) => [n, [1]])) });
+  try {
+    await run(s, { mode: 'random', loops: 6, links: names.map((n) => `${s.url}/manga/${n}`) });
+    const orders = []; const v = s.log.views.map((x) => x.slug);
+    for (let i = 0; i < v.length; i += 6) orders.push(v.slice(i, i + 6));
+    assert.equal(orders.length, 6);
+    for (const o of orders) assert.deepEqual([...o].sort(), names, 'mỗi vòng đủ 6 truyện, không lặp');
+    assert.ok(new Set(orders.map((o) => o.join())).size > 1, 'thứ tự khác nhau giữa các vòng');
+  } finally { await s.close(); }
+});
+
+test('mode random (không có link): lấy truyện ngẫu nhiên từ danh sách truyện của web, đủ maxStories', async () => {
+  const names = Array.from({ length: 20 }, (_, i) => `w${i + 1}`);
+  const s = await fakeSite({ stories: Object.fromEntries(names.map((n) => [n, [1]])), webList: names, pageSize: 5 });
+  try {
+    await run(s, { mode: 'random', links: [], ranking: { sort: 'views_day', maxStories: 6 } });
+    const got = s.log.views.map((v) => v.slug);
+    assert.equal(got.length, 6); assert.equal(new Set(got).size, 6, 'không trùng truyện');
+    assert.ok(got.every((n) => names.includes(n)));
+  } finally { await s.close(); }
+});
+
+test('mode ranking: đọc từ hạng 1 xuống theo thứ tự bảng, qua nhiều trang, dừng ở maxStories', async () => {
+  const names = Array.from({ length: 9 }, (_, i) => `r${i + 1}`);
+  const s = await fakeSite({ stories: Object.fromEntries(names.map((n) => [n, [1]])), ranking: { views_day: names, views_week: [...names].reverse() }, pageSize: 4 });
+  try {
+    await run(s, { mode: 'ranking', ranking: { sort: 'views_day', maxStories: 6 } });
+    assert.deepEqual(s.log.views.map((v) => v.slug), ['r1', 'r2', 'r3', 'r4', 'r5', 'r6']);
+    assert.deepEqual([...new Set(s.log.pages.map((p) => `${p.sort}:${p.page}`))], ['views_day:1', 'views_day:2'], 'chỉ tải đủ số trang cần');
+  } finally { await s.close(); }
+  const s2 = await fakeSite({ stories: Object.fromEntries(names.map((n) => [n, [1]])), ranking: { views_day: names, views_week: [...names].reverse() }, pageSize: 4 });
+  try {
+    await run(s2, { mode: 'ranking', ranking: { sort: 'views_week', maxStories: 100 } });
+    assert.deepEqual(s2.log.views.map((v) => v.slug), [...names].reverse(), 'sort khác thì theo bảng khác; maxStories lớn hơn số truyện thì đọc hết bảng');
+  } finally { await s2.close(); }
+});
+
+test('mode ranking: truyện toàn "đã đọc" thì chuyển xuống hạng kế; hết bảng thì nghỉ rồi lặp lại từ hạng 1', async () => {
+  const s = await fakeSite({ stories: { r1: Array.from({ length: 20 }, (_, i) => i + 1), r2: [1, 2] }, ranking: { views_day: ['r1', 'r2'] }, countedFn: (slug) => slug !== 'r1' });
+  try {
+    await run(s, { mode: 'ranking', loops: 2, ranking: { sort: 'views_day', maxStories: 10 } });
+    const seq = s.log.views.map((v) => v.slug);
+    assert.ok(seq.filter((x) => x === 'r1').length <= 2 * 8, 'r1 bị bỏ sớm ở mỗi vòng');
+    assert.equal(seq.filter((x) => x === 'r2').length, 4, 'r2 đọc đủ 2 chương x 2 vòng');
+    assert.equal(seq[0], 'r1'); assert.equal(seq.at(-1), 'r2');
+    assert.ok(s.log.pages.filter((p) => p.page === 1).length >= 2, 'mỗi vòng tải lại bảng xếp hạng (bảng có thể đổi)');
+  } finally { await s.close(); }
+});
+
+test('mode ranking: tải bảng xếp hạng lỗi thì ghi lỗi, nghỉ rồi thử lại (không thoát)', async () => {
+  const s = await fakeSite({ stories: { r1: [1] }, ranking: { views_day: ['r1'] } });
+  try {
+    const site = new Site({ web: s.url, timeoutMs: 2000 });
+    const real = site.getText.bind(site); let n = 0;
+    site.getText = async (p) => { if (p.startsWith('/danh-sach-truyen') && n++ < 1) throw new Error('timeout giả'); return real(p); };
+    await readAccount({ site, account: { email: 'a@x.com', password: 'pw' }, links: [], delay: fast, loops: 2, log: quiet, mode: 'ranking', ranking: { sort: 'views_day', maxStories: 5 }, switchRule: rule });
+    assert.equal(s.log.views.length, 1, 'vòng 1 lỗi bảng, vòng 2 đọc được r1');
+  } finally { await s.close(); }
+});
+
+test('validateConfig + loadConfig: mode/ranking/switch hợp lệ, thiếu thì lấy mặc định, sai thì báo lỗi', () => {
+  const ok = { web: 'https://w.com', accounts: [{ email: 'a@b.c', password: 'p' }], delay: {} };
+  assert.deepEqual(validateConfig({ ...ok, mode: 'ranking', ranking: { sort: 'views_week', maxStories: 10 } }), []);
+  assert.match(validateConfig({ ...ok, mode: 'abc' }).join(' '), /mode/);
+  assert.match(validateConfig({ ...ok, mode: 'ranking', ranking: { sort: 'xxx' } }).join(' '), /sort/);
+  assert.match(validateConfig({ ...ok, mode: 'ranking', ranking: { sort: 'views', maxStories: 0 } }).join(' '), /maxStories/);
+  assert.match(validateConfig({ ...ok, switch: { window: 0, alreadyReadPercent: 80 } }).join(' '), /window/);
+  assert.match(validateConfig({ ...ok, switch: { window: 10, alreadyReadPercent: 150 } }).join(' '), /alreadyReadPercent/);
+  const dir = mkdtempSync(join(tmpdir(), 'nd-'));
+  const f = join(dir, 'data.json');
+  writeFileSync(f, JSON.stringify(ok));
+  const c = loadConfig(f).config;
+  assert.equal(c.mode, 'list'); assert.equal(c.ranking.sort, 'views_day'); assert.equal(c.ranking.maxStories, 50);
+  assert.equal(c.switch.window, 10); assert.equal(c.switch.alreadyReadPercent, 80);
+  writeFileSync(f, JSON.stringify({ ...ok, ranking: { sort: 'views_week' }, switch: { window: 5 } }));
+  const d = loadConfig(f).config;
+  assert.equal(d.ranking.sort, 'views_week'); assert.equal(d.ranking.maxStories, 50, 'ghép từng trường con');
+  assert.equal(d.switch.window, 5); assert.equal(d.switch.alreadyReadPercent, 80);
+});

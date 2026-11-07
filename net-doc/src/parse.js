@@ -29,3 +29,21 @@ export function parseIds(html) {
   const chapter = /CHAPTER_ID\s*=\s*(\d+)/.exec(html)?.[1];
   return manga && chapter ? { manga, chapter } : null;
 }
+
+/** Mã truyện trên trang danh sách/bảng xếp hạng, theo thứ tự xuất hiện (bỏ trùng, bỏ phần trước khung danh sách như menu/sidebar). */
+export function parseStoryList(html) {
+  const start = html.indexOf('class="items"');
+  const body = start >= 0 ? html.slice(start) : html;
+  const seen = new Set(), out = [];
+  for (const m of body.matchAll(/href="(?:https?:\/\/[^"\/]+)?\/manga\/([a-z0-9][a-z0-9-]*)(?:\/[^"]*)?"/gi)) {
+    if (!seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
+  }
+  return out;
+}
+
+/** Số trang cuối của danh sách (lớn nhất trong các link /danh-sach-truyen/<trang>). */
+export function parseLastPage(html) {
+  let max = 1;
+  for (const m of html.matchAll(/\/danh-sach-truyen\/(\d+)/g)) max = Math.max(max, Number(m[1]));
+  return max;
+}
